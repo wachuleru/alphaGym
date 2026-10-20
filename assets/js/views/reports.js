@@ -98,7 +98,7 @@ function sectionLabel(key) {
   return {
     attendance: 'Asistencia y cumplimiento',
     level: 'Nivel actual e insignias',
-    workouts: 'Rutinas y sesiones realizadas',
+    workouts: 'Entrenamientos y pesos por sesión',
     weight: 'Peso corporal',
     measurements: 'Medidas corporales',
     goals: 'Objetivos',

@@ -1,12 +1,15 @@
 # GymTrack
 
-Plataforma de administración y seguimiento para gimnasios. Permite registrar alumnos, controlar asistencia, asignar rutinas, seguir progreso físico, gestionar mensualidades, generar informes imprimibles y respaldar toda la información — todo desde el navegador, sin backend.
+Plataforma de administración y seguimiento para gimnasios. Permite registrar alumnos, controlar asistencia, llevar un catálogo de ejercicios y plantillas de entrenamiento compartibles, seguir progreso físico, gestionar mensualidades, generar informes imprimibles y respaldar toda la información — todo desde el navegador, sin backend.
 
 ## Características
 
 - 👥 Gestión completa de alumnos con perfil, objetivos y notas
-- 📅 Registro y consulta de asistencia con historial detallado
-- 🏋️ Rutinas, ejercicios y sesiones realizadas
+- 📅 Registro de asistencia **con la ejecución de la sesión** (series, reps, peso, implemento)
+- 🏋️ Catálogo reutilizable de ejercicios + plantillas de entrenamiento compartibles entre alumnos
+- 🔁 Precarga desde el historial: al registrar una sesión, los pesos se autocompletan con lo último que hizo ese alumno
+- 📈 Delta de peso en vivo (`+5 kg · +8%`) junto al campo de peso
+- ✏️ Ejercicios añadidos o quitados **sólo para esa asistencia**, sin tocar la plantilla
 - 📏 Mediciones físicas (peso, medidas, calorías) con gráficos históricos
 - 🎯 Objetivos individuales configurables
 - 💳 Pagos, mensualidades, vencimientos e ingresos
@@ -53,9 +56,36 @@ Sin frameworks. Sin backend. Sin build step.
         ├── state.js          Estado en memoria + pub/sub
         ├── router.js         Router por hash
         ├── app.js            Punto de entrada
-        ├── services/         Lógica de dominio (students, attendance, etc.)
-        └── views/            Vistas (dashboard, students, etc.)
+        ├── services/
+        │   ├── exercises.js     Catálogo de ejercicios
+        │   ├── trainings.js     Plantillas de entrenamiento
+        │   ├── entries.js       Precarga y delta de peso (lógica pura)
+        │   └── …                students, attendance, payments, levels, …
+        └── views/
+            ├── attendance-form.js  Modal compartido de registro de asistencia
+            └── …               dashboard, students, workouts, settings, …
 ```
+
+### Modelo de datos (esquema v2)
+
+Tres conceptos separados que se unen al registrar una asistencia:
+
+```
+exercises   → catálogo reutilizable  { id, name, observation, muscleGroups[] }
+trainings   → plantillas globales   { id, name, observation, exerciseIds[] }  (sin studentId)
+attendances → la sesión realizada   { id, studentId, trainingId, dateISO, entries[] }
+              └─ entries[] = { exerciseId, order, extra, name, muscleGroups[],
+                               sets, reps, weightKg, implement, observation,
+                               lastWeightKg }
+```
+
+- Un **entrenamiento no pertenece a un alumno**: la misma plantilla la usan todos.
+- Cada **entrada** guarda un snapshot de nombre y grupos musculares, así que el historial
+  sobrevive aunque el ejercicio se renombre o se borre del catálogo.
+- `lastWeightKg` es la línea base del delta y se **recalcula cada vez que se guarda**,
+  no queda congelada al crear (así registrar una sesión con fecha retroactiva no miente).
+
+Ver [docs/data-model.md](docs/data-model.md) para el detalle completo.
 
 ## Ejecutar localmente
 
@@ -84,10 +114,25 @@ No se necesita build, ni Node, ni nada extra.
 
 ## Datos y respaldos
 
-- Los datos se guardan en `localStorage` bajo la clave `gymtrack:db:v1`.
+- Los datos se guardan en `localStorage` bajo la clave `gymtrack:db:v2`.
 - Toda la app se ejecuta en este navegador. Cambiar de navegador o borrar datos del sitio elimina la información.
 - Usa **Datos y configuración → Exportar base de datos** para descargar un JSON completo antes de borrar datos o cambiar de equipo.
 - Puedes cargar datos demo desde la misma pantalla (se identifican claramente y pueden borrarse después).
+
+### Desde la v1 (2.0)
+
+El esquema v2 separa catálogo, plantillas y ejecución real, así que **no hay migración automática**:
+la primera vez que abres GymTrack 2.0, tu base v1 se archiva tal cual en `gymtrack:archive:v1`
+y la v2 empieza vacía. Desde **Datos y configuración** aparece un bloque
+*"Archivo de la versión anterior (v1)"* con tres acciones:
+
+| Acción | Qué hace |
+|---|---|
+| **Descargar copia v1** | Guarda `gymtrack_v1_<fecha>.json` en tu equipo. Hazlo antes de nada. |
+| **Restaurar clave v1** | Vuelve a escribir la base antigua en `gymtrack:db:v1` para abrirla con GymTrack 1.x. Tus datos v2 no se tocan. |
+| **Eliminar archivo** | Borra el archivo. Irreversible. |
+
+Los respaldos v1 no se pueden importar en la v2: el modelo es incompatible, no un formato.
 
 ## Documentación adicional
 

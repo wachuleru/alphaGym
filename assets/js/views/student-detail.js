@@ -4,17 +4,19 @@
 
 import { $, el, fmtDate, fmtCLP, fmtDateTime, fmtPct, todayISO, fromISODate, initials, fmtTime, relativeTime, debounce } from '../utils.js';
 import { findStudent, fullName } from '../services/students.js';
-import { listAttendances } from '../services/attendance.js';
+import { listAttendances, deleteAttendance, attendancesWithEntries } from '../services/attendance.js';
 import { listMeasurements, MEASURE_FIELDS, getMeasureLabel, getMeasureUnit, lastReading } from '../services/measurements.js';
 import { computeIMC, classifyIMC, computeICE, classifyICE, computeICC, classifyICC, IMC_BANDS } from '../services/health.js';
 import { forStudent as paymentsFor, forStudent as paymentsForStudent } from '../services/payments.js';
-import { routinesForStudent, exercisesOfRoutine, sessionsForStudent } from '../services/workouts.js';
+import { findTraining } from '../services/trainings.js';
+import { weightDelta } from '../services/entries.js';
+import { openAttendanceForm } from './attendance-form.js';
 import { forStudent as goalsForStudent, createGoal, deleteGoal } from '../services/goals.js';
 import { forStudent as notesForStudent, createNote, updateNote, deleteNote } from '../services/notes.js';
 import {
   computeStudentMetrics, determineLevel, progressToNext, earnedBadges, allBadgesWithStatus,
 } from '../services/levels.js';
-import { LEVELS } from '../config.js';
+import { LEVELS, MUSCLE_GROUP_BY_VALUE } from '../config.js';
 import { openModal, confirmDialog, toast, toastError } from '../components.js';
 import { refreshIcons } from '../icons.js';
 import { lineChart, barChart, doughnutChart, destroyChart, waitChart } from '../charts.js';
@@ -409,10 +411,12 @@ function renderAttendanceTab(root, student) {
   });
 
   $('#sdRegisterAtt')?.addEventListener('click', async () => {
-    const m = await import('../services/attendance.js');
-    m.register({ studentId: student.id });
-    toast({ type: 'success', message: 'Asistencia registrada hoy.' });
-    renderAttendanceTab($('#sdContent'), student);
+    openAttendanceForm({ studentId: student.id, onSaved: () => {
+      renderAttendanceTab($('#sdContent'), student);
+      // If the user is also browsing Workouts tab, refresh it.
+      const t = $('.tab.is-active')?.dataset.tab;
+      if (t === 'workouts') renderWorkoutsTab($('#sdContent'), student);
+    }});
   });
 
   refreshIcons(root);
@@ -420,63 +424,50 @@ function renderAttendanceTab(root, student) {
 
 /* ---------- Tab: Workouts ---------- */
 function renderWorkoutsTab(root, student) {
-  const routines = routinesForStudent(student.id);
-  const sessions = sessionsForStudent(student.id);
+  const sessions = listForStudentWithEntries(student.id);
+
+  if (!sessions.length) {
+    root.innerHTML = `
+      <article class="card">
+        <header class="card__header">
+          <div class="stack">
+            <h3 class="card__title">Historial de entrenamientos</h3>
+            <p class="card__subtitle">Sesiones registradas con peso, series y reps.</p>
+          </div>
+          <div class="card__actions">
+            <button class="btn btn--primary btn--sm" id="sdNewAtt"><i data-lucide="plus"></i>Nueva asistencia</button>
+          </div>
+        </header>
+        <div class="card__body">
+          <div class="empty">
+            <div class="empty__icon"><i data-lucide="dumbbell"></i></div>
+            <div class="empty__title">Sin entrenamientos registrados</div>
+            <div class="empty__text">Registra la primera asistencia con sus ejercicios y pesos.</div>
+            <div class="empty__actions"><button class="btn btn--primary" id="sdNewAttEmpty"><i data-lucide="plus"></i>Nueva asistencia</button></div>
+          </div>
+        </div>
+      </article>`;
+    bindWorkoutsTab(root, student);
+    refreshIcons(root);
+    return;
+  }
 
   root.innerHTML = `
     <section style="display:flex; flex-direction:column; gap:var(--sp-5)">
       <article class="card">
         <header class="card__header">
-          <div class="stack"><h3 class="card__title">Rutinas asignadas</h3><p class="card__subtitle">Plantillas para este alumno</p></div>
+          <div class="stack">
+            <h3 class="card__title">Historial de entrenamientos</h3>
+            <p class="card__subtitle">${sessions.length} sesión(es) · ${countDistinctExercises(sessions)} ejercicio(s) distinto(s) · última ${fmtDate(sessions[0].dateISO)}</p>
+          </div>
           <div class="card__actions">
-            <button class="btn btn--secondary btn--sm" id="sdNewRoutine"><i data-lucide="plus"></i>Nueva rutina</button>
+            <button class="btn btn--primary btn--sm" id="sdNewAtt"><i data-lucide="plus"></i>Nueva asistencia</button>
           </div>
         </header>
-        <div class="card__body">
-          ${routines.length === 0
-            ? `<div class="empty"><div class="empty__icon"><i data-lucide="dumbbell"></i></div><div class="empty__title">Sin rutinas registradas</div><div class="empty__text">Crea la primera rutina para este alumno.</div><div class="empty__actions"><button class="btn btn--primary" id="sdNewRoutineEmpty"><i data-lucide="plus"></i>Nueva rutina</button></div></div>`
-            : `<div style="display:flex; flex-direction:column; gap:var(--sp-4)">${routines.map((r) => {
-                const ex = exercisesOfRoutine(r.id);
-                return `
-                  <div class="routine-card">
-                    <div class="routine-card__head">
-                      <div class="stack">
-                        <span class="routine-card__title">${escapeHtml(r.name)}</span>
-                        <span class="routine-card__sub">${escapeHtml(r.objective || '—')} · ${ex.length} ejercicio(s)</span>
-                      </div>
-                      <div class="row gap-2">
-                        <button class="btn btn--ghost btn--sm" data-act="editRoutine" data-id="${r.id}"><i data-lucide="pencil"></i>Editar</button>
-                        <button class="btn btn--danger btn--sm" data-act="deleteRoutine" data-id="${r.id}"><i data-lucide="trash-2"></i>Eliminar</button>
-                      </div>
-                    </div>
-                    <div class="exercise-list">
-                      ${ex.map((e) => `
-                        <div class="exercise-row">
-                          <div class="exercise-row__name">${escapeHtml(e.name)}<small>${escapeHtml(e.muscleGroup || '')}</small></div>
-                          <div class="t-mono">${escapeHtml(e.sets || '—')} series</div>
-                          <div class="t-mono">${escapeHtml(e.reps || '—')}</div>
-                          <div class="t-mono">${e.weightKg ? e.weightKg + ' kg' : '—'}</div>
-                        </div>
-                      `).join('')}
-                    </div>
-                  </div>
-                `;
-              }).join('')}</div>`
-          }
-        </div>
-      </article>
-
-      <article class="card">
-        <header class="card__header"><h3 class="card__title">Sesiones realizadas</h3></header>
-        <div class="card__body">
-          ${sessions.length === 0
-            ? `<div class="empty"><div class="empty__icon"><i data-lucide="check-circle-2"></i></div><div class="empty__title">Sin sesiones registradas</div><div class="empty__text">Las sesiones se registran como histórico al ejecutar la rutina.</div></div>`
-            : `<div class="table-wrap" style="border:none">
-                <table class="table">
-                  <thead><tr><th>Fecha</th><th>Duración</th><th>Notas</th></tr></thead>
-                  <tbody>${sessions.map((s) => `<tr><td class="t-mono">${fmtDate(s.date)}</td><td class="t-mono">${s.durationMin ? s.durationMin + ' min' : '—'}</td><td class="t-muted">${escapeHtml(s.notes || '—')}</td></tr>`).join('')}</tbody>
-                </table>
-              </div>`}
+        <div class="card__body" style="padding:0">
+          <div class="stack-2" style="padding:var(--sp-3)">
+            ${sessions.slice(0, 30).map((s) => attendanceCard(s)).join('')}
+          </div>
         </div>
       </article>
     </section>
@@ -485,170 +476,104 @@ function renderWorkoutsTab(root, student) {
   refreshIcons(root);
 }
 
-function bindWorkoutsTab(root, student) {
-  const newRoutine = () => openRoutineForm(student, null, () => renderWorkoutsTab($('#sdContent'), student));
-  $('#sdNewRoutine')?.addEventListener('click', newRoutine);
-  $('#sdNewRoutineEmpty')?.addEventListener('click', newRoutine);
+function listForStudentWithEntries(studentId) {
+  return attendancesWithEntries(studentId);
+}
 
-  root.addEventListener('click', async (e) => {
-    const editBtn = e.target.closest('button[data-act="editRoutine"]');
-    const delBtn = e.target.closest('button[data-act="deleteRoutine"]');
+function countDistinctExercises(sessions) {
+  const ids = new Set();
+  for (const s of sessions) for (const e of (s.entries || [])) if (e.exerciseId) ids.add(e.exerciseId);
+  return ids.size;
+}
+
+function attendanceCard(attendance) {
+  const training = attendance.trainingId ? findTraining(attendance.trainingId) : null;
+  // Three different reasons to have no name here — don't collapse them.
+  const title = training
+    ? training.name
+    : attendance.trainingId ? 'Entrenamiento eliminado' : 'Sesión libre';
+  const obsTitle = training && training.observation ? training.observation : (attendance.notes || '');
+
+  // Build prior index for this attendance so we can compute deltas in the card.
+  const all = listAttendances();
+  const priorMap = new Map();
+  const scoped = all
+    .filter((a) => a.studentId === attendance.studentId
+      && a.id !== attendance.id
+      && a.dateISO < attendance.dateISO
+      && Array.isArray(a.entries))
+    .sort((a, b) => `${b.dateISO}${b.timeISO || ''}`.localeCompare(`${a.dateISO}${a.timeISO || ''}`));
+  for (const a of scoped) {
+    for (const e of a.entries) {
+      if (e.exerciseId && !priorMap.has(e.exerciseId)) priorMap.set(e.exerciseId, e);
+    }
+  }
+
+  const rows = (attendance.entries || []).map((e) => {
+    const prev = priorMap.get(e.exerciseId);
+    const d = weightDelta(e.weightKg, prev?.weightKg ?? null);
+    const groups = (e.muscleGroups || [])
+      .map((g) => (MUSCLE_GROUP_BY_VALUE[g] || { label: g }).label)
+      .map(escapeHtml).join(' · ');
+    const wt = typeof e.weightKg === 'number' ? `${e.weightKg} kg` : '—';
+    return `
+      <div class="exercise-row">
+        <div class="exercise-row__name">
+          ${escapeHtml(e.name || 'Ejercicio')}
+          ${e.extra ? '<span class="badge badge--warning" style="margin-left:6px"><i data-lucide="plus"></i>Añadido</span>' : ''}
+          <small>${groups || '—'}</small>
+        </div>
+        <div class="t-mono">${escapeHtml(String(e.sets || '—'))} × ${escapeHtml(String(e.reps || '—'))}</div>
+        <div class="t-mono">${wt}</div>
+        <div class="weight-delta" style="color:${d.tone === 'up' ? 'var(--c-success)' : d.tone === 'down' ? 'var(--c-danger)' : 'var(--c-text-muted)'}">${escapeHtml(d.text)}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <article class="routine-card">
+      <header class="routine-card__head">
+        <div class="cell-name">
+          <div class="stack">
+            <span class="routine-card__title">${escapeHtml(title)} · ${fmtDate(attendance.dateISO)} ${fmtTime(attendance.timeISO)}</span>
+            <span class="routine-card__sub">${attendance.entries.length} ejercicio(s) · ${escapeHtml(obsTitle || training?.objective || '—')}</span>
+          </div>
+        </div>
+        <div class="row gap-2">
+          <button class="btn btn--ghost btn--sm" data-act="editAtt" data-id="${attendance.id}"><i data-lucide="pencil"></i>Editar</button>
+          <button class="btn btn--danger btn--sm" data-act="delAtt" data-id="${attendance.id}"><i data-lucide="trash-2"></i></button>
+        </div>
+      </header>
+      <div class="exercise-list">${rows}</div>
+    </article>`;
+}
+
+function bindWorkoutsTab(root, student) {
+  const rerender = () => renderWorkoutsTab($('#sdContent'), student);
+  const openNew = () => openAttendanceForm({ studentId: student.id, onSaved: rerender });
+  $('#sdNewAtt')?.addEventListener('click', openNew);
+  $('#sdNewAttEmpty')?.addEventListener('click', openNew);
+
+  // `root` survives re-renders (only its innerHTML is replaced), and saving a
+  // session re-runs this binder — so drop the previous handler or every save
+  // would add one more and "Editar" would open N stacked modals.
+  if (root.__gtWorkoutsClick) root.removeEventListener('click', root.__gtWorkoutsClick);
+  root.__gtWorkoutsClick = async (e) => {
+    const editBtn = e.target.closest('button[data-act="editAtt"]');
+    const delBtn = e.target.closest('button[data-act="delAtt"]');
     if (editBtn) {
-      const id = editBtn.dataset.id;
-      const routine = routinesForStudent(student.id).find((r) => r.id === id);
-      openRoutineForm(student, routine, () => renderWorkoutsTab($('#sdContent'), student));
+      const att = listAttendances().find((a) => a.id === editBtn.dataset.id);
+      if (att) openAttendanceForm({ studentId: att.studentId, existing: att, onSaved: rerender });
     }
     if (delBtn) {
       const id = delBtn.dataset.id;
-      const ok = await confirmDialog({ title: 'Eliminar rutina', message: '¿Eliminar esta rutina y todos sus ejercicios?', confirmLabel: 'Eliminar' });
+      const ok = await confirmDialog({ title: 'Eliminar asistencia', message: '¿Eliminar esta asistencia con sus ejercicios? No se puede deshacer.', confirmLabel: 'Eliminar', confirmKind: 'danger' });
       if (!ok) return;
-      const m = await import('../services/workouts.js');
-      m.deleteRoutine(id);
-      toast({ type: 'success', message: 'Rutina eliminada.' });
-      renderWorkoutsTab($('#sdContent'), student);
+      deleteAttendance(id);
+      toast({ type: 'success', message: 'Asistencia eliminada.' });
+      rerender();
     }
-  });
-}
-
-function openRoutineForm(student, existing, onSaved) {
-  const r = existing || { name: '', objective: '', studentId: student.id, exercises: [] };
-  const dialog = el('div');
-  dialog.innerHTML = `
-    <div class="form-grid">
-      <div class="field col-12">
-        <label class="field__label">Nombre de la rutina *</label>
-        <input class="input" id="rtName" value="${escapeHtml(r.name)}" placeholder="Ej: Tren superior fuerza" />
-      </div>
-      <div class="field col-12">
-        <label class="field__label">Objetivo</label>
-        <input class="input" id="rtObjective" value="${escapeHtml(r.objective)}" placeholder="Hipertrofia, resistencia, potencia…" />
-      </div>
-
-      <div class="col-12 stack-3">
-        <div class="between">
-          <h3 class="form-section__title" style="margin:0">Ejercicios</h3>
-          <button class="btn btn--secondary btn--sm" id="rtAddEx"><i data-lucide="plus"></i>Agregar ejercicio</button>
-        </div>
-        <div id="rtExercisesList" class="stack-2"></div>
-      </div>
-    </div>
-  `;
-
-  const exList = dialog.querySelector('#rtExercisesList');
-  let exercises = (r.exercises || []).slice();
-  if (exercises.length === 0) exercises.push({ name: '', muscleGroup: '', sets: '', reps: '', weightKg: '', restSec: '', instructions: '', notes: '' });
-
-  const renderExs = () => {
-    exList.innerHTML = exercises.map((ex, i) => `
-      <div class="card" style="padding:var(--sp-3)">
-        <div class="form-grid">
-          <div class="field col-6">
-            <label class="field__label">Nombre</label>
-            <input class="input input--inline" data-ex="name" data-i="${i}" value="${escapeHtml(ex.name)}" placeholder="Press banca" />
-          </div>
-          <div class="field col-6">
-            <label class="field__label">Grupo muscular</label>
-            <input class="input input--inline" data-ex="muscleGroup" data-i="${i}" value="${escapeHtml(ex.muscleGroup || '')}" placeholder="Pecho" />
-          </div>
-          <div class="field col-3">
-            <label class="field__label">Series</label>
-            <input class="input input--inline" data-ex="sets" data-i="${i}" value="${escapeHtml(ex.sets || '')}" placeholder="4" />
-          </div>
-          <div class="field col-3">
-            <label class="field__label">Reps</label>
-            <input class="input input--inline" data-ex="reps" data-i="${i}" value="${escapeHtml(ex.reps || '')}" placeholder="8-10" />
-          </div>
-          <div class="field col-3">
-            <label class="field__label">Peso (kg)</label>
-            <input class="input input--inline" data-ex="weightKg" data-i="${i}" value="${escapeHtml(ex.weightKg || '')}" placeholder="60" />
-          </div>
-          <div class="field col-3">
-            <label class="field__label">Descanso (s)</label>
-            <input class="input input--inline" data-ex="restSec" data-i="${i}" value="${escapeHtml(ex.restSec || '')}" placeholder="90" />
-          </div>
-          <div class="field col-9">
-            <label class="field__label">Instrucciones</label>
-            <input class="input input--inline" data-ex="instructions" data-i="${i}" value="${escapeHtml(ex.instructions || '')}" placeholder="Ejecución controlada…" />
-          </div>
-          <div class="field col-3" style="justify-content:flex-end">
-            <button class="btn btn--danger btn--sm" data-act="exRm" data-i="${i}"><i data-lucide="x"></i>Quitar</button>
-          </div>
-        </div>
-      </div>
-    `).join('');
   };
-  renderExs();
-
-  openModal({
-    title: existing ? 'Editar rutina' : 'Nueva rutina',
-    size: 'xl',
-    body: dialog,
-    actions: [
-      { label: 'Cancelar', kind: 'ghost' },
-      {
-        label: 'Guardar', kind: 'primary',
-        onClick: async () => {
-          const name = dialog.querySelector('#rtName').value.trim();
-          const objective = dialog.querySelector('#rtObjective').value.trim();
-          if (!name) { toastError('Nombre de la rutina obligatorio.'); return false; }
-          const m = await import('../services/workouts.js');
-          const updatedExercises = exList.querySelectorAll('[data-ex]');
-          // Build exercises array from inputs (preserve order)
-          const byIndex = new Map();
-          for (const inp of updatedExercises) {
-            const i = Number(inp.dataset.i);
-            if (!byIndex.has(i)) byIndex.set(i, {});
-            byIndex.get(i)[inp.dataset.ex] = inp.value;
-          }
-          const ordered = [...byIndex.entries()]
-            .sort(([a], [b]) => a - b)
-            .map(([_, v]) => v)
-            .filter((v) => v.name && v.name.trim());
-
-          let routineId;
-          if (existing) {
-            m.updateRoutine(existing.id, { name, objective });
-            routineId = existing.id;
-            // Replace exercises (simple approach: delete then re-add)
-            const oldExercises = exercisesOfRoutine(existing.id);
-            for (const oe of oldExercises) m.deleteExercise(oe.id);
-          } else {
-            const created = m.createRoutine({ studentId: student.id, name, objective });
-            routineId = created.id;
-          }
-          let order = 0;
-          for (const e of ordered) {
-            m.addExercise({ routineId, name: e.name, muscleGroup: e.muscleGroup, sets: e.sets, reps: e.reps, weightKg: e.weightKg, restSec: e.restSec, instructions: e.instructions, notes: e.notes || '', order: order++ });
-          }
-          toast({ type: 'success', message: existing ? 'Rutina actualizada.' : 'Rutina creada.' });
-          onSaved && onSaved();
-        },
-      },
-    ],
-  });
-
-  refreshIcons(dialog);
-
-  exList.addEventListener('input', (e) => {
-    const inp = e.target;
-    if (!inp.matches('[data-ex]')) return;
-    const i = Number(inp.dataset.i);
-    if (!exercises[i]) return;
-    exercises[i][inp.dataset.ex] = inp.value;
-  });
-
-  exList.addEventListener('click', (e) => {
-    const rm = e.target.closest('[data-act="exRm"]');
-    if (rm) {
-      exercises.splice(Number(rm.dataset.i), 1);
-      renderExs();
-    }
-  });
-
-  dialog.querySelector('#rtAddEx').addEventListener('click', () => {
-    exercises.push({ name: '', muscleGroup: '', sets: '', reps: '', weightKg: '', restSec: '', instructions: '', notes: '' });
-    renderExs();
-  });
+  root.addEventListener('click', root.__gtWorkoutsClick);
 }
 
 /* ---------- Tab: Progress ---------- */

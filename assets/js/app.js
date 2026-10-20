@@ -5,12 +5,70 @@
 
 import { $, $$ } from './utils.js';
 import { startRouter, route, navigate, onNavigate, currentRoute } from './router.js';
-import { load as loadStorage, getSaveStatus, subscribe } from './storage.js';
+import {
+  load as loadStorage,
+  getSaveStatus,
+  subscribe,
+  archiveLegacyIfPresent,
+  downloadLegacyArchive,
+} from './storage.js';
 import { initIcons, refreshIcons } from './icons.js';
 import { destroyAll as destroyAllCharts } from './charts.js';
 
-// Load storage on boot (also seeds if empty)
-loadStorage();
+// Archive any v1 database before opening v2 (one-shot, idempotent).
+// Skip in environments without localStorage (e.g. Node tests).
+const legacyArchive = typeof localStorage !== 'undefined' ? archiveLegacyIfPresent() : null;
+
+// Load storage on boot (also seeds if empty). Guarded for non-browser imports.
+if (typeof localStorage !== 'undefined') loadStorage();
+
+/**
+ * One-shot migration notice on first v2 boot.
+ * Lets the user download the v1 raw copy and acknowledges the schema change.
+ */
+function showMigrationNoticeIfNeeded() {
+  if (!legacyArchive || typeof document === 'undefined') return;
+  // defer so components.js + DOM are ready
+  setTimeout(async () => {
+    const { openModal, toast } = await import('./components.js');
+    const counts = legacyArchive.counts || {};
+    const rows = Object.entries(counts)
+      .filter(([, n]) => typeof n === 'number' && n > 0)
+      .map(([k, n]) => `<li>${escapeHtml(k)}: <strong>${n}</strong></li>`)
+      .join('');
+    const body = document.createElement('div');
+    body.innerHTML = `
+      <p>Actualizamos el modelo de entrenamientos. Tus datos v1 quedaron archivados de forma automática y la base v2 comienza vacía.</p>
+      ${rows ? `<ul class="stack-2" style="list-style:disc;padding-left:1.25rem;margin-bottom:var(--sp-3)">${rows}</ul>` : ''}
+      <p class="t-muted" style="font-size:var(--fs-sm)">Si quieres conservar una copia de la base anterior, descárgala ahora. Después podrás seguir usando GymTrack con el catálogo de ejercicios y entrenamientos compartibles.</p>
+    `;
+    openModal({
+      title: 'Bienvenido a GymTrack 2.0',
+      size: 'sm',
+      body,
+      actions: [
+        {
+          label: 'Descargar copia v1',
+          kind: 'secondary',
+          closeOnClick: false,
+          onClick: () => {
+            const ok = downloadLegacyArchive();
+            toast({ type: ok ? 'success' : 'error', message: ok ? 'Descarga iniciada.' : 'No se pudo descargar.' });
+          },
+        },
+        {
+          label: 'Continuar',
+          kind: 'primary',
+        },
+      ],
+    });
+  }, 250);
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[<>&"']/g, (c) =>
+    ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;' }[c]));
+}
 
 // Sidebar toggle
 function setupSidebar() {
@@ -185,20 +243,26 @@ route('/settings', async (params) => {
 });
 
 /* ===========================================================
-   Boot
+   Browser-only boot. The module file is importable from Node
+   tests too (e.g. browser-link.mjs); we skip everything that
+   needs DOM/localStorage when they are not present.
    =========================================================== */
+if (typeof document !== 'undefined') {
+  setupSidebar();
+  setupSaveIndicator();
+  bindGlobalKeyboard();
+  setupWorkspaceTitle();
+  initIcons();
+  startRouter();
 
-setupSidebar();
-setupSaveIndicator();
-bindGlobalKeyboard();
-setupWorkspaceTitle();
-initIcons();
-startRouter();
+  // One-shot v1 → v2 migration notice (only fires when there was a legacy archive)
+  showMigrationNoticeIfNeeded();
 
-// Destroy any chart instances before navigation (in case views don't clean up)
-onNavigate(() => destroyAllCharts());
+  // Destroy any chart instances before navigation (in case views don't clean up)
+  onNavigate(() => destroyAllCharts());
 
-// Helpful diagnostic in console
-console.info(`%c GymTrack %c v${(window.__gt && window.__gt.version) || '1.0.0'} `,
-  'background:#f4c662;color:#0a1124;padding:2px 6px;border-radius:3px 0 0 3px;font-weight:700',
-  'background:#0a1124;color:#f4c662;padding:2px 6px;border-radius:0 3px 3px 0');
+  // Helpful diagnostic in console
+  console.info(`%c GymTrack %c v${(window.__gt && window.__gt.version) || '2.0.0'} `,
+    'background:#f4c662;color:#0a1124;padding:2px 6px;border-radius:3px 0 0 3px;font-weight:700',
+    'background:#0a1124;color:#f4c662;padding:2px 6px;border-radius:0 3px 3px 0');
+}

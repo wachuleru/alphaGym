@@ -280,7 +280,7 @@
 }
 .recent-chip i { width: 14px; height: 14px; color: var(--c-success); }
 
-/* ---------- Workouts / routines ---------- */
+/* ---------- Entrenamientos / catálogo de ejercicios ---------- */
 .routine-card {
   display: flex;
   flex-direction: column;
@@ -317,6 +317,24 @@
 }
 .exercise-row__name { font-weight: 600; color: var(--c-text-strong); }
 .exercise-row__name small { display: block; font-weight: 400; font-size: var(--fs-xs); color: var(--c-text-muted); }
+
+/* ---------- v2: entradas de asistencia ----------
+   La fila de 4 columnas (nombre · series×reps · peso+Δ · implemento) se
+   colapsa a 2 columnas en pantallas estrechas para que los inputs no se
+   aplasten. El !important pisa el grid-template inline del formulario. */
+@media (max-width: 720px) {
+  .exercise-row { grid-template-columns: 1fr 1fr !important; }
+}
+/* Ejercicio añadido sólo para esta asistencia (no viene del entrenamiento). */
+.exercise-row--extra,
+.routine-card--extra { border-left: 3px solid var(--c-warning); }
+/* Texto del delta de peso (kg firmado + %). */
+.weight-delta {
+  font-family: var(--ff-mono);
+  font-feature-settings: "tnum" 1;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
 
 /* ---------- Reports ---------- */
 .report-builder {

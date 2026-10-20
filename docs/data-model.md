@@ -1,12 +1,34 @@
 # Modelo de datos — GymTrack
 
-> Documentación del esquema completo de datos. La aplicación almacena todo en `localStorage` bajo la clave `gymtrack:db:v1` como un único objeto JSON. Esta página describe cada entidad, sus campos y las relaciones entre ellas.
+> Documentación del esquema completo de datos. La aplicación almacena todo en `localStorage` bajo la clave `gymtrack:db:v2` como un único objeto JSON. Esta página describe cada entidad, sus campos y las relaciones entre ellas.
 
 ## Ubicación
 
-- **Clave:** `gymtrack:db:v1`
+- **Clave:** `gymtrack:db:v2`
 - **Formato:** JSON serializado (string). El objeto raíz contiene `meta`, `config` y todas las colecciones.
 - **Persistencia local:** `localStorage` del navegador. Sin servidor.
+- **Archivo de la versión anterior:** `gymtrack:archive:v1` (ver [Migración v1 → v2](#migración-v1--v2)).
+
+## Los tres conceptos
+
+La v2 separa tres cosas que antes estaban mezcladas:
+
+| Concepto | Colección | Pertenece a un alumno? |
+|---|---|---|
+| **Catálogo de ejercicios** | `exercises` | No — es global y reutilizable |
+| **Plantilla de entrenamiento** | `trainings` | No — la comparten todos los alumnos |
+| **La sesión realmente realizada** | `attendances[].entries[]` | Sí — es el historial de ese alumno |
+
+El punto donde se unen es el **formulario de asistencia**: eliges alumno + entrenamiento y la app
+arma las filas con lo que ese alumno hizo la última vez.
+
+```
+exercises ──< trainings.exerciseIds[]        (N:M, el orden es el índice del array)
+                            │
+                            │ trainingId
+                            ▼
+students ──< attendances ──< entries[] ──> exercises  (snapshot: name + muscleGroups)
+```
 
 ## Estructura raíz
 
@@ -15,10 +37,9 @@
   "meta":   { ... },                // Metadatos de la base
   "config": { ... },                // Configuración global
   "students":            [],        // Alumnos
-  "attendances":         [],        // Asistencias registradas
-  "routines":            [],        // Plantillas de rutina
-  "routineExercises":    [],        // Ejercicios que componen cada rutina
-  "performedSessions":   [],        // Sesiones efectivamente realizadas (historial)
+  "attendances":         [],        // Asistencias registradas (cada una con entries[])
+  "exercises":           [],        // Catálogo reutilizable de ejercicios
+  "trainings":           [],        // Plantillas de entrenamiento (globales)
   "measurements":        [],        // Mediciones físicas (peso, medidas, calorías)
   "goals":               [],        // Objetivos individuales
   "payments":            [],        // Pagos / mensualidades
@@ -26,14 +47,17 @@
 }
 ```
 
+**Eliminadas en v2:** `routines`, `routineExercises` y `performedSessions` (esta última nunca la
+escribía ninguna vista).
+
 ## `meta`
 
 ```json
 {
-  "version": 1,                     // Versión del esquema de datos
-  "appVersion": "1.0.0",            // Versión de la app con que se generó
+  "version": 2,                     // Versión del esquema de datos
+  "appVersion": "2.0.0",            // Versión de la app con que se generó
   "appName": "GymTrack",
-  "createdAt": "2026-10-14T...",    // ISO timestamp del primer arranque
+  "createdAt": "2026-10-20T...",    // ISO timestamp del primer arranque
   "lastExportAt": null,             // ISO timestamp de la última exportación JSON
   "lastImportAt": null,             // ISO timestamp de la última importación JSON
   "isDemo": false                   // true si se cargaron datos demo
@@ -66,6 +90,8 @@
 | `birthdate`        | string    | Fecha de nacimiento `YYYY-MM-DD` (opcional).           |
 | `joinedAt`         | string    | Fecha de inscripción `YYYY-MM-DD`.                     |
 | `status`           | string    | `active` · `inactive` · `suspended`.                  |
+| `sex`              | string    | `F` · `M`. Se usa para los umbrales de índices (ICE, ICC). |
+| `heightCm`         | number    | Estatura en cm. Necesaria para el IMC.                 |
 | `mainGoal`         | string    | Objetivo principal declarado por el alumno.            |
 | `weeklyGoal`       | number    | Frecuencia semanal objetivo (sesiones/sem). Por defecto: 2. |
 | `preferredTimes`   | string    | Horarios habituales.                                   |
@@ -74,61 +100,98 @@
 | `membershipEnd`    | string    | Vencimiento de la membresía actual (opcional).        |
 | `meta`             | object    | `createdAt`, `updatedAt`, `isDemo`.                  |
 
-### `attendances` — Asistencias
+### `attendances` — Asistencias (con la ejecución)
 
-| Campo       | Tipo   | Descripción                                                  |
-|-------------|--------|--------------------------------------------------------------|
-| `id`        | string | `att_xxxxxx`.                                               |
-| `studentId` | string | FK → `students.id`.                                         |
-| `dateISO`   | string | Fecha de la asistencia `YYYY-MM-DD`.                        |
-| `timeISO`   | string | Hora exacta ISO (timestamp).                                |
-| `type`      | string | `regular` · `personalizada` · `evaluación`.                |
-| `notes`     | string | Observaciones (opcional).                                   |
-| `meta`      | object | `createdAt`, `isDemo` (opcional).                           |
+| Campo       | Tipo     | Descripción                                                       |
+|-------------|----------|-------------------------------------------------------------------|
+| `id`        | string   | `att_xxxxxx`.                                                    |
+| `studentId` | string   | FK → `students.id`.                                              |
+| `trainingId`| string   | FK opcional → `trainings.id`. `null` si no se usó plantilla.      |
+| `dateISO`   | string   | Fecha de la asistencia `YYYY-MM-DD`.                             |
+| `timeISO`   | string   | Hora exacta ISO (timestamp). Desempata sesiones del mismo día.   |
+| `type`      | string   | `regular` · `personalizada` · `evaluación`.                     |
+| `notes`     | string   | Observaciones de la sesión (opcional).                           |
+| `entries`   | object[] | Lo que se hizo. Ver `AttendanceEntry` abajo.                     |
+| `meta`      | object   | `createdAt`, `isDemo` (opcional).                                |
 
-> La duplicidad (mismo alumno + misma fecha + mismo tipo) se evita automáticamente.
+> **Duplicidad:** mismo alumno + misma fecha + mismo tipo no puede repetirse. El formulario detecta
+> el choque y cae en **modo edición** sobre el registro existente, en vez de descartar en silencio
+> lo que el usuario acaba de escribir. La asimetría se resuelve con `timeISO`.
 
-### `routines` — Rutinas (plantillas)
+### `AttendanceEntry` — qué se hizo en una sesión
 
-| Campo       | Tipo   | Descripción                                                  |
-|-------------|--------|--------------------------------------------------------------|
-| `id`        | string | `rut_xxxxxx`.                                               |
-| `studentId` | string | FK → `students.id` (puede ser null = plantilla global).      |
-| `name`      | string | Nombre de la rutina.                                         |
-| `objective` | string | Objetivo (Hipertrofia, Resistencia, etc.).                   |
-| `status`    | string | `active` · `archived`.                                     |
-| `createdAt` | string | `YYYY-MM-DD`.                                              |
-| `meta`      | object | `createdAt`, `isDemo`.                                     |
+Embebida en `attendances[].entries[]` (no es una colección propia).
 
-### `routineExercises` — Ejercicios de una rutina
+| Campo            | Tipo     | Descripción                                                          |
+|------------------|----------|----------------------------------------------------------------------|
+| `id`             | string   | `ent_xxxxxx`.                                                        |
+| `exerciseId`     | string   | FK → `exercises.id`.                                                 |
+| `order`          | number   | Posición dentro de la sesión (índice del array).                     |
+| `extra`          | boolean  | `true` si **no venía** del entrenamiento: se añadió sólo para hoy.  |
+| `name`           | string   | **Snapshot** del nombre al guardar.                                  |
+| `muscleGroups`   | string[] | **Snapshot** de los grupos musculares al guardar.                    |
+| `sets`           | string   | Series. Texto libre (`4`, `3-4`) — admite rangos.                    |
+| `reps`           | string   | Repeticiones o tiempo (`8-10`, `45s`).                               |
+| `weightKg`       | number\|null | Peso en kg. `null` = peso corporal (dominadas, plancha…).        |
+| `implement`      | string   | `peso_corporal` · `barra` · `mancuernas` · `kettlebell` · `cable` · `maquina` · `bandas` · `otro`. |
+| `observation`    | string   | Nota del entrenador sobre ese ejercicio en esa sesión.               |
+| `lastWeightKg`   | number\|null | Peso de la sesión anterior del mismo alumno para ese ejercicio. Línea base del delta. |
 
-| Campo          | Tipo   | Descripción                                        |
-|----------------|--------|----------------------------------------------------|
-| `id`           | string | `exr_xxxxxx`.                                     |
-| `routineId`    | string | FK → `routines.id`.                               |
-| `name`         | string | Nombre del ejercicio.                              |
-| `muscleGroup`  | string | Grupo muscular (Pecho, Espalda, etc.).            |
-| `sets`         | string | Series (texto libre: `4`, `3-4`).                 |
-| `reps`         | string | Repeticiones / tiempo (`8-10`, `45s`).           |
-| `durationSec`  | string | Duración si aplica (segundos).                    |
-| `weightKg`     | string | Peso (texto libre).                                |
-| `restSec`      | string | Descanso (segundos).                               |
-| `instructions` | string | Notas técnicas.                                    |
-| `notes`        | string | Notas libres.                                      |
-| `order`        | number | Posición dentro de la rutina.                      |
+**Por qué hay snapshots.** `name` y `muscleGroups` están duplicados a propósito: si el ejercicio se
+renombra, se le cambian los grupos o se borra del catálogo, el historial sigue mostrando lo que se
+hizo ese día. Borrar un ejercicio es un *soft delete* (`status: 'archived'`), nunca un borrado físico.
 
-### `performedSessions` — Sesiones realizadas
+**`extra` y la plantilla.** Un ejercicio con `extra: true` se añadió en esa sesión concreta.
+Editar la lista de ejercicios de un entrenamiento **no toca** las asistencias ya registradas: cada
+asistencia guarda su propia copia.
 
-| Campo          | Tipo     | Descripción                                  |
-|----------------|----------|----------------------------------------------|
-| `id`           | string   | `ses_xxxxxx`.                              |
-| `studentId`    | string   | FK → `students.id`.                         |
-| `routineId`    | string   | FK opcional a `routines.id`.                |
-| `name`         | string   | Nombre de la sesión.                        |
-| `date`         | string   | `YYYY-MM-DD` en que se realizó.             |
-| `durationMin`  | string   | Duración en minutos.                        |
-| `notes`        | string   | Notas.                                       |
-| `entries`      | object[] | Ejercicios efectivamente realizados.         |
+### `exercises` — Catálogo de ejercicios
+
+Global y reutilizable: la misma fila la usan todos los alumnos y todos los entrenamientos.
+
+| Campo          | Tipo     | Descripción                                                       |
+|----------------|----------|-------------------------------------------------------------------|
+| `id`           | string   | `exc_xxxxxx`.                                                    |
+| `name`         | string   | Nombre del ejercicio.                                            |
+| `observation`  | string   | Notas técnicas (opcional).                                       |
+| `muscleGroups` | string[] | Uno o varios de la lista cerrada. Ver abajo.                     |
+| `status`       | string   | `active` · `archived`.                                           |
+| `createdAt`    | string   | `YYYY-MM-DD`.                                                    |
+| `meta`         | object   | `createdAt`, `isDemo`.                                           |
+
+**Grupos musculares** — lista cerrada en `config.js` (`MUSCLE_GROUPS`):
+
+| value | Etiqueta | color |
+|---|---|---|
+| `piernas` | Piernas | `accent` |
+| `core` | Core | `info` |
+| `espalda` | Espalda | `success` |
+| `brazos` | Brazos | `warning` |
+
+Un ejercicio puede estar en **varios** a la vez (Dominadas → `espalda` + `brazos`), cosa que el
+modelo v1 no podía expresar porque guardaba un único string.
+
+### `trainings` — Entrenamientos (plantillas)
+
+Plantillas **globales**. No tienen `studentId`: la misma la usan todos los alumnos que quieran.
+
+| Campo         | Tipo     | Descripción                                                       |
+|---------------|----------|-------------------------------------------------------------------|
+| `id`          | string   | `trn_xxxxxx`.                                                    |
+| `name`        | string   | Nombre del entrenamiento.                                         |
+| `objective`   | string   | Objetivo (Hipertrofia, Resistencia, Potencia…).                  |
+| `observation` | string   | Indicaciones generales para la sesión.                           |
+| `exerciseIds` | string[] | FKs → `exercises.id`. **El índice del array es el orden.**        |
+| `status`      | string   | `active` · `archived`.                                           |
+| `createdAt`   | string   | `YYYY-MM-DD`.                                                    |
+| `meta`        | object   | `createdAt`, `isDemo`.                                           |
+
+> No hay campo `order` para los ejercicios: el orden es la posición en `exerciseIds`. Agregar al
+> final, mover con los botones ↑ ↓.
+
+**Al borrar un entrenamiento** se pone `trainingId: null` en las asistencias que lo referencian y
+se conservan sus `entries`. El historial no se pierde; sólo el título del entrenamiento pasa a
+leerse como "Entrenamiento eliminado".
 
 ### `measurements` — Mediciones físicas
 
@@ -200,6 +263,61 @@ Cada medición lleva todos los campos opcionales; se admiten nulos.
 
 > Por defecto las notas NO aparecen en los informes compartidos con alumnos; sólo cuando el administrador marca explícitamente la sección "Notas del entrenador" al construir el informe.
 
+## Precarga desde el historial
+
+Al abrir el formulario de asistencia con alumno + entrenamiento + fecha, la app arma una fila por
+ejercicio del entrenamiento. Toda la lógica vive en `services/entries.js`, que es **puro** (sin DOM
+ni `localStorage`) y por eso se testea headless con `node tests/entries.mjs`.
+
+### `priorEntriesIndex(attendances, { studentId, beforeISO, excludeAttendanceId })`
+
+Devuelve `Map<exerciseId, entry>` con la última ejecución conocida de cada ejercicio. Reglas:
+
+- Sólo asistencias del mismo `studentId`.
+- **Estrictamente anteriores:** `dateISO < beforeISO`. El formato `YYYY-MM-DD` ordena
+  lexicográficamente, así que la comparación de strings es correcta.
+- Los empates dentro del mismo día se resuelven por `timeISO`.
+- `excludeAttendanceId` evita la autorreferencia al editar una sesión existente.
+- Gana la más reciente (el primero que se encuentra al recorrer de más nuevo a más viejo).
+
+### `buildDraftEntries({ attendances, exercises, training, studentId, dateISO, excludeAttendanceId })`
+
+Genera las filas del formulario:
+
+- Recorre `training.exerciseIds` **en orden**.
+- La **prescripción** (series, reps, peso, implemento) viene **del historial**, nunca del catálogo.
+  El catálogo no prescribe nada: describe el ejercicio, no lo que este alumno puede levantar hoy.
+- La **identidad** (`name`, `muscleGroups`) viene del catálogo si el ejercicio sigue ahí; si no, del
+  snapshot de la última ejecución.
+- `lastWeightKg` = el peso de la sesión anterior para ese ejercicio, o `null` en la primera vez.
+- Sin entrenamiento elegido no hay filas: el entrenador añade lo que corresponda.
+
+## Delta de peso
+
+`weightDelta(current, previous)` → `{ kg, pct, text, tone }`. Es **la única** fuente de verdad del
+delta: la usan el formulario, la pestaña Entrenamientos de la ficha, los informes y la exportación
+Excel. El Excel no puede contradecir a la pantalla porque llama a la misma función.
+
+| Caso | Texto | Tono |
+|---|---|---|
+| Sin peso actual o sin registro previo | `— sin registro previo` | apagado |
+| Sin cambio | `0 kg · sin cambio` | apagado |
+| Subió | `+5 kg · +8%` | verde |
+| Bajó | `-2.5 kg · -3%` | rojo |
+| Previo = 0 | `+5 kg` (sin porcentaje) | verde |
+
+Reglas de formato, deliberadas:
+
+- **Punto decimal, no coma.** `toLocaleString('es-CL')` rinde `2,5`; para los números que se
+  comparan con el input y con el Excel tiene que ser `2.5`.
+- **Porcentaje entero** (`Math.round`), no con decimales: `+8%` se lee de un vistazo, `+8,33%` no.
+- **Sin porcentaje si el previo es 0** (división por cero).
+
+**`lastWeightKg` se recalcula al guardar, no se congela al crear.** `saveAttendance()` vuelve a
+indexar el historial antes de cada escritura. Así, si registras una sesión con fecha retroactiva
+—hoy, para la semana pasada— y después vuelves a guardar la sesión que estaba después, su línea
+base se corrige sola. Congelarla produciría deltas mentirosos justo en el caso donde más importan.
+
 ## Sistema de niveles (gamificación)
 
 GymTrack premia exclusivamente la constancia. Hay cinco niveles: Principiante, Constante, Comprometido, Disciplinado y Referente. Los umbrales están en `assets/js/config.js` en la constante `LEVELS`. Cada nivel exige simultáneamente:
@@ -226,6 +344,35 @@ Independientes del nivel. Lista en `config.js`:
 - `Medición 3`: tres mediciones registradas.
 - `Objetivo fijado`: el alumno tiene al menos un objetivo.
 
+## Migración v1 → v2
+
+Es una migración **destructiva por diseño**. La v1 ataba el entrenamiento al alumno y no guardaba
+la ejecución; la v2 separa los tres conceptos. Convertir automáticamente sería inventar datos que
+el usuario nunca registró, así que la app **no lo intenta**.
+
+Al arrancar la v2 con una base v1 presente, `archiveLegacyIfPresent()` hace exactamente una vez:
+
+1. Lee `gymtrack:db:v1`.
+2. Guarda en `gymtrack:archive:v1` un sobre `{ app, archivedAt, fromSchema, reason, counts, raw }`
+   donde **`raw` es el string original byte-idéntico**.
+3. Borra `gymtrack:db:v1`.
+4. La v2 se crea vacía y se muestra un modal one-shot con los conteos y un botón de descarga.
+
+Si `gymtrack:db:v2` ya existe, **nunca** se toca la v1 (arrancar dos veces no rompe nada).
+
+### Gestión del archivo
+
+Desde **Datos y configuración → Archivo de la versión anterior (v1)**, sólo visible si hay archivo:
+
+| Acción | Efecto |
+|---|---|
+| **Descargar copia v1** | `gymtrack_v1_<fecha>.json` con el contenido byte-idéntico. |
+| **Restaurar clave v1** | Reescribe `gymtrack:db:v1` para abrirla con GymTrack 1.x. **No toca la v2.** |
+| **Eliminar archivo** | Borra `gymtrack:archive:v1`. Irreversible. |
+
+`importJSON()` rechaza respaldos con `schemaVersion < 2` y dice explícitamente dónde está la copia
+en vez de intentar una conversión imposible.
+
 ## Respaldo
 
 La exportación a JSON guarda todas las colecciones más `meta` y `config`. El archivo contiene además `app`, `schemaVersion`, `appVersion`, `exportedAt` para validar identidad.
@@ -234,10 +381,12 @@ La importación valida:
 
 1. Que sea JSON parseable.
 2. Que `app === "GymTrack"`.
-3. Que `schemaVersion` no sea mayor a la versión actual.
-4. Que existan todas las colecciones requeridas.
+3. Que `schemaVersion` sea un número y no sea mayor a la versión actual.
+4. Que exista la sección `data` y todas las colecciones requeridas.
 
-Si la versión del esquema es más antigua y compatible, se aplican migraciones mínimas (rellenar campos faltantes). Si la versión es del futuro, se rechaza la importación.
+Si el esquema es más nuevo (futuro), se rechaza. Si es más viejo (v1), se rechaza con un mensaje
+que apunta al bloque de archivo histórico. Dentro de la misma versión, las colecciones que falten
+se rellenan vacías al cargar.
 
 ## Privacidad
 

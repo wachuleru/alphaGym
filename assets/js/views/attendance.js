@@ -2,12 +2,12 @@
    GymTrack — Attendance (global) view
    =========================================================== */
 
-import { $, el, fmtDate, fmtTime, todayISO, fromISODate, debounce, initials, fmtPct } from '../utils.js';
+import { $, fmtDate, fmtTime, todayISO, fromISODate, debounce, initials } from '../utils.js';
 import { listStudents, fullName } from '../services/students.js';
-import { listAttendances, register as registerAttendance, deleteAttendance } from '../services/attendance.js';
+import { listAttendances, deleteAttendance } from '../services/attendance.js';
 import { refreshIcons } from '../icons.js';
-import { openModal, confirmDialog, toast } from '../components.js';
-import { barChart, lineChart, destroyAll, waitChart } from '../charts.js';
+import { confirmDialog, toast } from '../components.js';
+import { barChart, destroyAll, waitChart } from '../charts.js';
 
 const escapeHtml = (s) => String(s || '').replace(/[<>&"']/g, (c) =>
   ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;' }[c]));
@@ -248,50 +248,14 @@ function buildChart() {
 }
 
 function openRegister() {
-  const dialog = el('div');
-  const opts = listStudents().filter((s) => s.status === 'active');
-  dialog.innerHTML = `
-    <div class="form-grid">
-      <div class="field col-12"><label class="field__label">Alumno *</label>
-        <select class="select" id="attStudent" required>
-          <option value="">Selecciona un alumno…</option>
-          ${opts.map((s) => `<option value="${s.id}">${escapeHtml(fullName(s))}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field col-6"><label class="field__label">Fecha</label><input class="input" type="date" id="attDate" value="${todayISO()}" /></div>
-      <div class="field col-6"><label class="field__label">Tipo</label>
-        <select class="select" id="attType">
-          <option value="regular">Regular</option>
-          <option value="personalizada">Personalizada</option>
-          <option value="evaluación">Evaluación</option>
-        </select>
-      </div>
-      <div class="field col-12"><label class="field__label">Observaciones</label><textarea class="textarea" id="attNotes" rows="2"></textarea></div>
-    </div>`;
-  openModal({
-    title: 'Registrar asistencia',
-    size: 'sm',
-    body: dialog,
-    actions: [
-      { label: 'Cancelar', kind: 'ghost' },
-      {
-        label: 'Registrar', kind: 'primary',
-        onClick: () => {
-          const studentId = dialog.querySelector('#attStudent').value;
-          if (!studentId) { toast({ type: 'warning', message: 'Selecciona un alumno.' }); return false; }
-          registerAttendance({
-            studentId,
-            dateISO: dialog.querySelector('#attDate').value,
-            type: dialog.querySelector('#attType').value,
-            notes: dialog.querySelector('#attNotes').value,
-          });
-          toast({ type: 'success', message: 'Asistencia registrada.' });
-          refreshKPIs();
-          refreshRecent();
-          refreshToday();
-        },
+  // Delegado al formulario compartido (schema v2: catálogo + preload + delta).
+  import('./attendance-form.js').then((mod) =>
+    mod.openAttendanceForm({
+      onSaved: () => {
+        refreshKPIs();
+        refreshRecent();
+        refreshToday();
       },
-    ],
-  });
-  refreshIcons(dialog);
+    })
+  );
 }

@@ -8,8 +8,11 @@ import { listStudents } from './students.js';
 import { listAttendances } from './attendance.js';
 import { listMeasurements, MEASURE_FIELDS } from './measurements.js';
 import { listPayments } from './payments.js';
-import { listRoutines, listRoutineExercises } from './workouts.js';
+import { listExercises as listAllExercises } from './exercises.js';
+import { listTrainings, exercisesOf as exercisesOfTraining } from './trainings.js';
 import { listGoals } from './goals.js';
+import { MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE } from '../config.js';
+import { weightDelta } from './entries.js';
 
 /* ===========================================================
    UTILITIES
@@ -70,8 +73,14 @@ export function exportStudents() {
 
 export function exportAttendances() {
   const studentById = new Map(listStudents().map((s) => [s.id, s]));
+  const trainingById = new Map(listTrainings().map((t) => [t.id, t]));
   const rows = listAttendances().map((a) => {
     const s = studentById.get(a.studentId);
+    const t = a.trainingId ? trainingById.get(a.trainingId) : null;
+    const n = Array.isArray(a.entries) ? a.entries.length : 0;
+    const sumKg = Array.isArray(a.entries)
+      ? a.entries.reduce((acc, e) => acc + (typeof e.weightKg === 'number' ? e.weightKg : 0), 0)
+      : 0;
     return [
       a.id,
       a.studentId,
@@ -79,10 +88,13 @@ export function exportAttendances() {
       a.dateISO,
       a.timeISO,
       a.type,
+      t ? t.name : '',
+      n,
+      n ? Math.round(sumKg * 100) / 100 : '',
       a.notes,
     ];
   });
-  const headers = ['ID', 'ID Alumno', 'Alumno', 'Fecha', 'Hora', 'Tipo', 'Notas'];
+  const headers = ['ID', 'ID Alumno', 'Alumno', 'Fecha', 'Hora', 'Tipo', 'Entrenamiento', 'N° ejercicios', 'Σ volumen (kg)', 'Notas'];
   const wb = checkXLSX().utils.book_new();
   checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headers, rows), 'Asistencias');
   downloadWorkbook(wb, `gymtrack_asistencias_${todayISO()}.xlsx`);
@@ -132,29 +144,94 @@ export function exportPayments() {
 
 export function exportWorkouts() {
   const studentById = new Map(listStudents().map((s) => [s.id, s]));
-  const exByRid = new Map();
-  for (const e of listRoutineExercises()) {
-    if (!exByRid.has(e.routineId)) exByRid.set(e.routineId, []);
-    exByRid.get(e.routineId).push(e);
-  }
-  const headerA = ['ID Rutina', 'ID Alumno', 'Alumno', 'Nombre rutina', 'Objetivo', 'Estado', 'Fecha creación', '# Ejercicios'];
-  const headerB = ['ID Rutina', 'ID Alumno', 'Alumno', 'Ejercicio', 'Grupo muscular', 'Series', 'Repeticiones', 'Peso (kg)', 'Descanso (s)', 'Notas'];
-  const routines = listRoutines().map((r) => {
-    const s = studentById.get(r.studentId);
+  const exById = new Map(listAllExercises({ includeArchived: true }).map((e) => [e.id, e]));
+
+  /* Sheet 1: Catalog */
+  const headerCatalog = ['ID', 'Nombre', 'Grupos musculares', 'Observación', 'Estado', 'Fecha creación'];
+  const rowsCatalog = listAllExercises({ includeArchived: true }).map((e) => [
+    e.id,
+    e.name,
+    (e.muscleGroups || []).map((g) => (MUSCLE_GROUP_BY_VALUE[g] || { label: g }).label).join(', '),
+    e.observation || '',
+    e.status,
+    e.createdAt || '',
+  ]);
+
+  /* Sheet 2: Trainings */
+  const headerTraining = ['ID', 'Nombre', 'Objetivo', 'Observación', 'Estado', 'N° ejercicios', 'Ejercicios (en orden)'];
+  const rowsTraining = listTrainings({ includeArchived: true }).map((t) => {
+    const ex = exercisesOfTraining(t.id);
     return [
-      r.id, r.studentId, s ? studentFullName(s) : '', r.name, r.objective, r.status, r.createdAt, (exByRid.get(r.id) || []).length
+      t.id,
+      t.name,
+      t.objective || '',
+      t.observation || '',
+      t.status,
+      ex.length,
+      ex.map((e) => e.name).join(' → '),
     ];
   });
-  const exercises = [];
-  for (const r of listRoutines()) {
-    const s = studentById.get(r.studentId);
-    for (const e of (exByRid.get(r.id) || [])) {
-      exercises.push([r.id, r.studentId, s ? studentFullName(s) : '', e.name, e.muscleGroup, e.sets, e.reps, e.weightKg, e.restSec, e.notes]);
+
+  /* Sheet 3: Attendance x Student (one row per exercise per attendance) */
+  // For the prior weight we read other attendances chronologically.
+  const allAtt = listAttendances();
+  const sorted = allAtt.slice().sort((a, b) =>
+    `${a.dateISO}${a.timeISO || ''}`.localeCompare(`${b.dateISO}${b.timeISO || ''}`)
+  );
+  const trainingById = new Map(listTrainings({ includeArchived: true }).map((t) => [t.id, t]));
+  // Distinguish "no template was used" from "the template was deleted".
+  const trainingLabel = (a) =>
+    !a.trainingId ? 'Sesión libre' : (trainingById.get(a.trainingId)?.name || 'Entrenamiento eliminado');
+  // priorMap[sid][exerciseId] -> weightKg
+  const priorByStudent = new Map();
+  for (const a of sorted) {
+    const bag = priorByStudent.get(a.studentId) || new Map();
+    for (const e of (a.entries || [])) {
+      if (!bag.has(e.exerciseId)) bag.set(e.exerciseId, typeof e.weightKg === 'number' ? e.weightKg : null);
+    }
+    priorByStudent.set(a.studentId, bag);
+  }
+
+  const headerAtt = [
+    'Fecha', 'Alumno', 'Entrenamiento', 'Ejercicio', 'Grupos', 'Series', 'Repeticiones',
+    'Implemento', 'Peso (kg)', 'Peso anterior (kg)', 'Δ kg', 'Δ %', 'Añadido', 'Observación',
+  ];
+  const rowsAtt = [];
+  for (const a of sorted) {
+    const s = studentById.get(a.studentId);
+    for (const e of (a.entries || [])) {
+      const prior = priorByStudent.get(a.studentId)?.get(e.exerciseId) ?? null;
+      const cur = typeof e.weightKg === 'number' ? e.weightKg : null;
+      const d = weightDelta(cur, prior);
+      const prevKg = prior != null ? prior : '';
+      const groups = (e.muscleGroups || []).map((g) => (MUSCLE_GROUP_BY_VALUE[g] || { label: g }).label).join(', ');
+      const impl = (IMPLEMENT_BY_VALUE[e.implement] || { label: e.implement || '' }).label;
+      rowsAtt.push([
+        a.dateISO,
+        s ? studentFullName(s) : '',
+        trainingLabel(a),
+        e.name || (exById.get(e.exerciseId)?.name) || 'Ejercicio eliminado',
+        groups,
+        e.sets ?? '',
+        e.reps ?? '',
+        impl,
+        cur != null ? cur : '',
+        prevKg,
+        d.kg != null ? d.kg : '',
+        d.pct != null ? d.pct : '',
+        e.extra ? 'Sí' : 'No',
+        e.observation || '',
+      ]);
+      // Update the priorMap for the next attendance (most-recent-wins).
+      const bag = priorByStudent.get(a.studentId);
+      bag.set(e.exerciseId, cur);
     }
   }
+
   const wb = checkXLSX().utils.book_new();
-  checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headerA, routines), 'Rutinas');
-  checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headerB, exercises), 'Ejercicios');
+  checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headerCatalog, rowsCatalog), 'Ejercicios');
+  checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headerTraining, rowsTraining), 'Entrenamientos');
+  checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headerAtt, rowsAtt), 'Entrenamiento x Alumno');
   downloadWorkbook(wb, `gymtrack_entrenamientos_${todayISO()}.xlsx`);
 }
 

@@ -4,15 +4,16 @@
    =========================================================== */
 
 import { fmtDate, fmtCLP, fromISODate } from '../utils.js';
-import { LEVELS } from '../config.js';
+import { LEVELS, MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE } from '../config.js';
 import { computeStudentMetrics, determineLevel, progressToNext, earnedBadges } from './levels.js';
 import { fullName } from './students.js';
 import { listAttendances } from './attendance.js';
 import { listMeasurements, MEASURE_FIELDS, getMeasureLabel, getMeasureUnit } from './measurements.js';
 import { forStudent as paymentsForStudent } from './payments.js';
-import { routinesForStudent, exercisesOfRoutine, sessionsForStudent } from './workouts.js';
+import { listTrainings, findTraining } from './trainings.js';
 import { forStudent as goalsForStudent } from './goals.js';
 import { forStudent as notesForStudent } from './notes.js';
+import { weightDelta } from './entries.js';
 
 /* ---------- Section selector (defaults) ---------- */
 export const DEFAULT_SECTIONS = {
@@ -35,6 +36,13 @@ export function buildReportContext(student, opts) {
   const allAtt = listAttendances().filter((a) => a.studentId === student.id);
   const metrics = computeStudentMetrics(student, allAtt, listMeasurements(), []);
 
+  // Pre-compute workout sessions for the print block (newest first, last 10).
+  const workoutSessions = allAtt
+    .filter((a) => Array.isArray(a.entries) && a.entries.length > 0)
+    .slice()
+    .sort((a, b) => `${b.dateISO}${b.timeISO || ''}`.localeCompare(`${a.dateISO}${a.timeISO || ''}`))
+    .slice(0, 10);
+
   return {
     student,
     sections,
@@ -46,8 +54,8 @@ export function buildReportContext(student, opts) {
     attendances: allAtt,
     measurements: listMeasurements().filter((m) => m.studentId === student.id),
     payments: paymentsForStudent(student.id),
-    routines: routinesForStudent(student.id),
-    sessions: sessionsForStudent(student.id),
+    trainings: listTrainings(),
+    workoutSessions,
     goals: goalsForStudent(student.id),
     notes: notesForStudent(student.id).filter((n) => n.shared),
     generatedAt: new Date().toISOString(),
@@ -212,34 +220,41 @@ export function renderReport(ctx, gymName = 'GymTrack') {
 
       ${ctx.sections.workouts ? `
         <section class="report-section">
-          <h2 class="report-section__title">Entrenamientos</h2>
-          ${ctx.routines.length === 0 ? '<p>Sin rutinas asignadas.</p>' : ''}
-          ${ctx.routines.map((r) => {
-            const ex = exercisesOfRoutine(r.id);
+          <h2 class="report-section__title">Entrenamientos y pesos por sesión</h2>
+          ${ctx.workoutSessions.length === 0 ? '<p style="color:#64748b">Sin sesiones registradas con ejercicios.</p>' : ''}
+          ${ctx.workoutSessions.map((a) => {
+            const t = a.trainingId ? findTraining(a.trainingId) : null;
+            // Distinguish "no template was used" from "the template was deleted".
+            const title = t ? t.name : (a.trainingId ? 'Entrenamiento eliminado' : 'Sesión libre');
+            // Resolve prior entries strictly before this date, same student.
+            const allAtt = listAttendances().filter((x) => x.studentId === a.studentId && x.dateISO < a.dateISO && Array.isArray(x.entries));
+            allAtt.sort((x, y) => `${y.dateISO}${y.timeISO || ''}`.localeCompare(`${x.dateISO}${x.timeISO || ''}`));
+            const priorMap = new Map();
+            for (const x of allAtt) for (const e of x.entries) if (!priorMap.has(e.exerciseId)) priorMap.set(e.exerciseId, e);
             return `
-              <h3 style="margin:0 0 6px">${e(r.name)} — ${e(r.objective || '')}</h3>
+              <h3 style="margin:0 0 6px">${e(title)} — ${fmtDate(a.dateISO)}</h3>
               <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:8px">
-                <thead><tr style="background:#f1f5f9"><th align="left" style="padding:6px">Ejercicio</th><th align="left" style="padding:6px">Grupo</th><th align="left" style="padding:6px">Series</th><th align="left" style="padding:6px">Reps</th><th align="left" style="padding:6px">Peso</th></tr></thead>
+                <thead><tr style="background:#f1f5f9"><th align="left" style="padding:6px">Ejercicio</th><th align="left" style="padding:6px">Grupo</th><th align="left" style="padding:6px">Series×Reps</th><th align="left" style="padding:6px">Peso</th><th align="left" style="padding:6px">Δ vs anterior</th><th align="left" style="padding:6px">Obs.</th></tr></thead>
                 <tbody>
-                  ${ex.map((x) => `
-                    <tr style="border-bottom:1px solid #e2e8f0">
-                      <td style="padding:6px">${e(x.name)}</td>
-                      <td style="padding:6px">${e(x.muscleGroup || '—')}</td>
-                      <td style="padding:6px">${e(x.sets || '—')}</td>
-                      <td style="padding:6px">${e(x.reps || '—')}</td>
-                      <td style="padding:6px">${x.weightKg ? x.weightKg + ' kg' : '—'}</td>
-                    </tr>
-                  `).join('')}
+                  ${a.entries.map((x) => {
+                    const grp = (x.muscleGroups || []).map((g) => (MUSCLE_GROUP_BY_VALUE[g] || { label: g }).label).join(', ');
+                    const prev = priorMap.get(x.exerciseId);
+                    const wt = typeof x.weightKg === 'number' ? `${x.weightKg} kg` : '—';
+                    const d = weightDelta(x.weightKg, prev?.weightKg ?? null);
+                    return `
+                      <tr style="border-bottom:1px solid #e2e8f0">
+                        <td style="padding:6px">${e(x.name)}${x.extra ? ' <em>(+)</em>' : ''}</td>
+                        <td style="padding:6px">${e(grp || '—')}</td>
+                        <td style="padding:6px">${e(String(x.sets || '—'))} × ${e(String(x.reps || '—'))}</td>
+                        <td style="padding:6px">${wt}</td>
+                        <td style="padding:6px">${e(d.text)}</td>
+                        <td style="padding:6px">${e(x.observation || '')}</td>
+                      </tr>`;
+                  }).join('')}
                 </tbody>
               </table>
             `;
           }).join('')}
-          ${ctx.sessions.length === 0 ? '<p style="color:#64748b">Sin sesiones realizadas registradas.</p>' : `
-            <h3 style="margin:12px 0 6px">Sesiones realizadas</h3>
-            <ul style="margin:0; padding-left:18px">
-              ${ctx.sessions.slice(0, 10).map((s) => `<li>${fmtDate(s.date)} — ${e(s.name)}${s.durationMin ? ` · ${s.durationMin} min` : ''}</li>`).join('')}
-            </ul>
-          `}
         </section>
       ` : ''}
 

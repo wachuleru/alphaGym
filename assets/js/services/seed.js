@@ -1,10 +1,10 @@
 /* ===========================================================
-   GymTrack — Seed demo data
+   GymTrack — Seed demo data (schema v2)
    Marked with `meta.isDemo` so the user can later wipe it.
    =========================================================== */
 
-import { uid, todayISO, toISODate, addDays, fmtDate } from '../utils.js';
-import { DEFAULT_WEEKLY_GOAL } from '../config.js';
+import { uid, todayISO, toISODate, addDays } from '../utils.js';
+import { DEFAULT_WEEKLY_GOAL, MUSCLE_GROUPS, IMPLEMENTS } from '../config.js';
 
 const DEMO_NAMES = [
   ['Camila', 'Rojas'],
@@ -34,49 +34,53 @@ const DEMO_GOALS = [
   'Mantener estado físico actual',
 ];
 
-const ROUTINES_DEMO = [
+/** Catalog of exercises (reusable across trainings). */
+const EXERCISES_DEMO = [
+  { name: 'Press banca',          muscleGroups: ['brazos'],                    implement: 'barra',      sets: '4', reps: '8-10', rest: 90,  baseWeight: 50 },
+  { name: 'Press inclinado',      muscleGroups: ['brazos'],                    implement: 'mancuernas', sets: '3', reps: '10-12', rest: 75,  baseWeight: 18 },
+  { name: 'Remo con barra',       muscleGroups: ['espalda'],                   implement: 'barra',      sets: '4', reps: '8-10',  rest: 90,  baseWeight: 45 },
+  { name: 'Dominadas',            muscleGroups: ['espalda', 'brazos'],         implement: 'peso_corporal', sets: '4', reps: '8',  rest: 90,  baseWeight: 0 },
+  { name: 'Sentadilla',           muscleGroups: ['piernas'],                   implement: 'barra',      sets: '5', reps: '5',     rest: 120, baseWeight: 60 },
+  { name: 'Peso muerto rumano',   muscleGroups: ['piernas', 'espalda'],        implement: 'barra',      sets: '4', reps: '6-8',   rest: 90,  baseWeight: 70 },
+  { name: 'Prensa',              muscleGroups: ['piernas'],                   implement: 'maquina',    sets: '4', reps: '10',    rest: 90,  baseWeight: 120 },
+  { name: 'Hip thrust',          muscleGroups: ['piernas'],                   implement: 'barra',      sets: '4', reps: '8-10',  rest: 90,  baseWeight: 80 },
+  { name: 'Curl bíceps',         muscleGroups: ['brazos'],                    implement: 'mancuernas', sets: '3', reps: '12',    rest: 45,  baseWeight: 12 },
+  { name: 'Tríceps polea',       muscleGroups: ['brazos'],                    implement: 'cable',      sets: '3', reps: '12',    rest: 45,  baseWeight: 20 },
+  { name: 'Plancha',             muscleGroups: ['core'],                      implement: 'peso_corporal', sets: '3', reps: '45s', rest: 30,  baseWeight: 0 },
+  { name: 'Kettlebell swings',   muscleGroups: ['piernas', 'core'],           implement: 'kettlebell', sets: '4', reps: '20',    rest: 45,  baseWeight: 16 },
+  { name: 'Remo TRX',            muscleGroups: ['espalda'],                   implement: 'bandas',     sets: '3', reps: '12',    rest: 45,  baseWeight: 0 },
+  { name: 'Face pulls',          muscleGroups: ['espalda'],                   implement: 'cable',      sets: '3', reps: '15',    rest: 45,  baseWeight: 18 },
+  { name: 'Extensión cuádriceps',muscleGroups: ['piernas'],                   implement: 'maquina',    sets: '3', reps: '12',    rest: 60,  baseWeight: 50 },
+];
+
+/** Training templates (decoupled from students). */
+const TRAININGS_DEMO = [
   {
     name: 'Tren superior · fuerza',
     objective: 'Hipertrofia',
-    muscleGroups: ['pecho', 'espalda', 'brazos', 'hombros'],
-    exercises: [
-      { name: 'Press banca',          muscleGroup: 'Pecho',     sets: 4, reps: '8-10', restSec: 90 },
-      { name: 'Remo con barra',       muscleGroup: 'Espalda',   sets: 4, reps: '8-10', restSec: 90 },
-      { name: 'Press militar',        muscleGroup: 'Hombros',   sets: 3, reps: '10-12', restSec: 60 },
-      { name: 'Curl bíceps',          muscleGroup: 'Brazos',    sets: 3, reps: '12', restSec: 45 },
-      { name: 'Tríceps polea',        muscleGroup: 'Brazos',    sets: 3, reps: '12', restSec: 45 },
-    ],
+    observation: 'Calentamiento previo 10 min',
+    exerciseNames: ['Press banca', 'Remo con barra', 'Press inclinado', 'Curl bíceps', 'Tríceps polea', 'Face pulls'],
   },
   {
     name: 'Tren inferior · potencia',
     objective: 'Fuerza',
-    muscleGroups: ['cuádriceps', 'femorales', 'glúteos', 'gemelos'],
-    exercises: [
-      { name: 'Sentadilla',           muscleGroup: 'Cuádriceps',sets: 5, reps: '5', restSec: 120, weightKg: 60 },
-      { name: 'Peso muerto rumano',   muscleGroup: 'Femorales', sets: 4, reps: '6-8', restSec: 90 },
-      { name: 'Prensa',               muscleGroup: 'Cuádriceps',sets: 4, reps: '10', restSec: 90 },
-      { name: 'Hip thrust',           muscleGroup: 'Glúteos',   sets: 4, reps: '8-10', restSec: 90 },
-      { name: 'Elevación gemelos',    muscleGroup: 'Gemelos',   sets: 4, reps: '15', restSec: 45 },
-    ],
+    observation: 'Priorizar carga; bajar a 8 reps si falla la técnica',
+    exerciseNames: ['Sentadilla', 'Peso muerto rumano', 'Prensa', 'Hip thrust', 'Extensión cuádriceps'],
   },
   {
     name: 'Full body · resistencia',
     objective: 'Resistencia',
-    muscleGroups: ['cuerpo completo'],
-    exercises: [
-      { name: 'Kettlebell swings',    muscleGroup: 'Cuerpo completo', sets: 4, reps: '20', restSec: 45 },
-      { name: 'Burpees',              muscleGroup: 'Cuerpo completo', sets: 4, reps: '12', restSec: 45 },
-      { name: 'Plancha',              muscleGroup: 'Core',             sets: 3, reps: '45s', restSec: 30 },
-      { name: 'Sentadilla goblet',    muscleGroup: 'Cuerpo completo', sets: 4, reps: '15', restSec: 45 },
-      { name: 'Remo TRX',             muscleGroup: 'Espalda',          sets: 3, reps: '12', restSec: 45 },
-    ],
+    observation: 'Pausa mínima entre series',
+    exerciseNames: ['Kettlebell swings', 'Dominadas', 'Remo TRX', 'Plancha'],
   },
 ];
 
 function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 function pick(arr) { return arr[rand(0, arr.length - 1)]; }
 
-function genAttendancesForStudent(studentId, weeks = 14, sessionsPerWeek = [0, 0, 1, 1, 2, 2, 3]) {
+/* ---------- Demo generators ---------- */
+
+function genAttendancesForStudent(studentId, weeks = 10, sessionsPerWeek = [0, 1, 1, 2, 2, 3]) {
   const out = [];
   const today = new Date();
   for (let w = weeks; w >= 0; w--) {
@@ -90,10 +94,12 @@ function genAttendancesForStudent(studentId, weeks = 14, sessionsPerWeek = [0, 0
       out.push({
         id: uid('att'),
         studentId,
+        trainingId: null,
         dateISO: toISODate(d),
         timeISO: `2026-01-01T${String(rand(6, 21)).padStart(2,'0')}:${rand(0,1) ? '00' : '30'}:00.000Z`,
         type: 'regular',
         notes: '',
+        entries: [],
         meta: { createdAt: new Date().toISOString(), isDemo: true },
       });
     }
@@ -104,9 +110,9 @@ function genAttendancesForStudent(studentId, weeks = 14, sessionsPerWeek = [0, 0
 function genMeasurementsForStudent(studentId, weeks = 10) {
   const out = [];
   const baseWeight = rand(58, 95);
-  const baseWaist  = rand(70, 105);
-  const baseChest  = rand(85, 115);
-  const baseHip    = rand(85, 115);
+  const baseWaist = rand(70, 105);
+  const baseChest = rand(85, 115);
+  const baseHip = rand(85, 115);
   const today = new Date();
   let w = baseWeight, waist = baseWaist, chest = baseChest, hip = baseHip;
   for (let i = weeks; i >= 0; i -= 2) {
@@ -117,11 +123,11 @@ function genMeasurementsForStudent(studentId, weeks = 10) {
       studentId,
       date: toISODate(d),
       weightKg: Math.round((w + (Math.random() - 0.5) * 0.6) * 10) / 10,
-      waistCm:  Math.round(waist),
-      hipCm:    Math.round(hip),
-      chestCm:  Math.round(chest),
-      armCm:    rand(30, 42),
-      thighCm:  rand(48, 65),
+      waistCm: Math.round(waist),
+      hipCm: Math.round(hip),
+      chestCm: Math.round(chest),
+      armCm: rand(30, 42),
+      thighCm: rand(48, 65),
       notes: '',
       meta: { createdAt: new Date().toISOString(), isDemo: true },
     });
@@ -138,7 +144,6 @@ function genPaymentsForStudent(studentId, monthlyAmount = 35000, joinedDaysAgo) 
   const today = new Date();
   const joined = new Date();
   joined.setDate(joined.getDate() - joinedDaysAgo);
-  // generate one payment per month since joined day
   let cursor = new Date(joined);
   cursor.setDate(1);
   while (cursor <= today) {
@@ -159,7 +164,6 @@ function genPaymentsForStudent(studentId, monthlyAmount = 35000, joinedDaysAgo) 
     });
     cursor.setMonth(cursor.getMonth() + 1);
   }
-  // paidAt = dueDate + a few days for paid ones
   return out.map((p) => {
     if (p.status === 'paid') {
       const d = fromISODateHelper(p.dueDate);
@@ -171,20 +175,105 @@ function genPaymentsForStudent(studentId, monthlyAmount = 35000, joinedDaysAgo) 
   });
 }
 
-// helper kept local to avoid extra import
 function fromISODateHelper(s) {
   const [y, m, d] = s.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 
+/** Build training records first (need IDs to assign to attendances). */
+function buildTrainings() {
+  const cats = EXERCISES_DEMO.map((ex) => {
+    const id = uid('exc');
+    return {
+      id,
+      name: ex.name,
+      observation: '',
+      muscleGroups: ex.muscleGroups,
+      status: 'active',
+      createdAt: todayISO(),
+      meta: { createdAt: new Date().toISOString(), isDemo: true },
+      _baseWeight: ex.baseWeight,
+      _implement: ex.implement,
+    };
+  });
+  const catByName = new Map(cats.map((c) => [c.name, c]));
+
+  const trainings = TRAININGS_DEMO.map((t) => {
+    const exerciseIds = t.exerciseNames.map((n) => catByName.get(n).id);
+    return {
+      id: uid('trn'),
+      name: t.name,
+      objective: t.objective,
+      observation: t.observation,
+      exerciseIds,
+      status: 'active',
+      createdAt: toISODate(new Date()),
+      meta: { createdAt: new Date().toISOString(), isDemo: true },
+    };
+  });
+
+  return { exercises: cats, trainings };
+}
+
+/**
+ * For about half the demo students, fully populate the last few attendances
+ * with weighted entries from a chosen training, with progressive overload
+ * (each session adds +2.5 kg or +1 rep on average).
+ */
+function genAttendancesWithEntries(studentId, trainings, exercises) {
+  const out = [];
+  const today = new Date();
+  const t = pick(trainings);
+  if (!t || !t.exerciseIds.length) return out;
+  const sessions = [3, 4, 5];
+  for (let s = 0; s < pick(sessions); s++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (s * 7 + rand(0, 3)));
+    const dateISO = toISODate(d);
+    const entries = t.exerciseIds.map((eid, i) => {
+      const ex = exercises.find((x) => x.id === eid);
+      const startW = (ex?._baseWeight ?? 0) + rand(-5, 10);
+      const sets = String(ex && /(45s|^\d+s$)/.test(ex.reps) ? ex.sets : ex?.sets || '4');
+      const reps = String(ex?.reps || '8');
+      const weightKg = ex && ex._baseWeight > 0 ? Math.round((startW + s * rand(1, 3)) * 2) / 2 : null;
+      const implement = ex?._implement || 'barra';
+      return {
+        id: uid('ent'),
+        exerciseId: eid,
+        order: i,
+        extra: false,
+        name: ex?.name || 'Ejercicio',
+        muscleGroups: ex?.muscleGroups || [],
+        sets,
+        reps,
+        weightKg,
+        implement,
+        observation: '',
+        lastWeightKg: weightKg != null && s > 0 ? Math.round((weightKg - rand(1, 3)) * 2) / 2 : null,
+      };
+    });
+    out.push({
+      id: uid('att'),
+      studentId,
+      trainingId: t.id,
+      dateISO,
+      timeISO: `2026-01-01T${String(rand(6, 21)).padStart(2,'0')}:${rand(0,1) ? '00' : '30'}:00.000Z`,
+      type: 'regular',
+      notes: '',
+      entries,
+      meta: { createdAt: new Date().toISOString(), isDemo: true },
+    });
+  }
+  return out;
+}
+
 /** Main seed generator. Returns a full DB-shaped object marked with isDemo. */
 export function buildSeed() {
+  const { exercises, trainings } = buildTrainings();
   const studentRecords = [];
   const attendanceRecords = [];
   const measurementRecords = [];
   const paymentRecords = [];
-  const routineRecords = [];
-  const routineExerciseRecords = [];
   const goalRecords = [];
   const noteRecords = [];
 
@@ -217,37 +306,12 @@ export function buildSeed() {
     attendanceRecords.push(...genAttendancesForStudent(id));
     measurementRecords.push(...genMeasurementsForStudent(id));
     paymentRecords.push(...genPaymentsForStudent(id, monthlyFee, joinedDaysAgo));
-    // assign 1 routine to some students
+
+    // Half the students get full weighted-attendance history.
     if (i % 2 === 0) {
-      const tmpl = ROUTINES_DEMO[i % ROUTINES_DEMO.length];
-      const routineId = uid('rut');
-      routineRecords.push({
-        id: routineId,
-        studentId: id,
-        name: tmpl.name,
-        objective: tmpl.objective,
-        status: 'active',
-        createdAt: toISODate(new Date()),
-        meta: { createdAt: new Date().toISOString(), isDemo: true },
-      });
-      tmpl.exercises.forEach((ex, idx) => {
-        routineExerciseRecords.push({
-          id: uid('exr'),
-          routineId,
-          name: ex.name,
-          muscleGroup: ex.muscleGroup,
-          sets: ex.sets,
-          reps: ex.reps,
-          durationSec: ex.reps && /^\d+s$/.test(ex.reps) ? Number(ex.reps.replace('s','')) : '',
-          weightKg: ex.weightKg || '',
-          restSec: ex.restSec || '',
-          instructions: '',
-          notes: '',
-          order: idx,
-        });
-      });
+      attendanceRecords.push(...genAttendancesWithEntries(id, trainings, exercises));
     }
-    // goal for some
+
     if (i % 3 === 0) {
       goalRecords.push({
         id: uid('goal'),
@@ -263,7 +327,7 @@ export function buildSeed() {
         meta: { createdAt: new Date().toISOString(), isDemo: true },
       });
     }
-    // a private note
+
     noteRecords.push({
       id: uid('nt'),
       studentId: id,
@@ -278,8 +342,8 @@ export function buildSeed() {
 
   return {
     meta: {
-      version: 1,
-      appVersion: '1.0.0',
+      version: 2,
+      appVersion: '2.0.0',
       appName: 'GymTrack',
       createdAt: new Date().toISOString(),
       lastExportAt: null,
@@ -295,9 +359,8 @@ export function buildSeed() {
     },
     students: studentRecords,
     attendances: attendanceRecords,
-    routines: routineRecords,
-    routineExercises: routineExerciseRecords,
-    performedSessions: [],
+    exercises,
+    trainings,
     measurements: measurementRecords,
     goals: goalRecords,
     payments: paymentRecords,

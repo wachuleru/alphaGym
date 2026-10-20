@@ -2,9 +2,11 @@
    GymTrack — config & constants
    =========================================================== */
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const STORAGE_KEY = `gymtrack:db:v${SCHEMA_VERSION}`;
-export const APP_VERSION = '1.0.0';
+export const LEGACY_STORAGE_KEY = 'gymtrack:db:v1';
+export const ARCHIVE_KEY = 'gymtrack:archive:v1';
+export const APP_VERSION = '2.0.0';
 export const APP_NAME = 'GymTrack';
 
 /**
@@ -127,6 +129,38 @@ export const STATUS_PAYMENT = [
   { value: 'paid',     label: 'Pagado',    color: 'success' },
   { value: 'overdue',  label: 'Vencido',   color: 'danger'  },
 ];
+
+/* ===========================================================
+   Schema v2 — catálogos cerrados
+   =========================================================== */
+
+/** Grupos musculares posibles (lista cerrada). `color` mapea a `.badge--*`. */
+export const MUSCLE_GROUPS = [
+  { value: 'piernas', label: 'Piernas', color: 'accent'  },
+  { value: 'core',    label: 'Core',    color: 'info'    },
+  { value: 'espalda', label: 'Espalda', color: 'success' },
+  { value: 'brazos',  label: 'Brazos',  color: 'warning' },
+];
+
+export const MUSCLE_GROUP_BY_VALUE = Object.fromEntries(
+  MUSCLE_GROUPS.map((g) => [g.value, g])
+);
+
+/** Implementos posibles en una asistencia. 'otro' es el escape hatch. */
+export const IMPLEMENTS = [
+  { value: 'peso_corporal', label: 'Peso corporal' },
+  { value: 'barra',         label: 'Barra' },
+  { value: 'mancuernas',    label: 'Mancuernas' },
+  { value: 'kettlebell',    label: 'Kettlebell' },
+  { value: 'cable',         label: 'Polea / cable' },
+  { value: 'maquina',       label: 'Máquina' },
+  { value: 'bandas',        label: 'Bandas elásticas' },
+  { value: 'otro',          label: 'Otro' },
+];
+
+export const IMPLEMENT_BY_VALUE = Object.fromEntries(
+  IMPLEMENTS.map((i) => [i.value, i])
+);
 
 /* Chart palette helper */
 export const chartPalette = () => {

@@ -1,5 +1,42 @@
 # GymTrack — Resumen de entrega
 
+## 0. Novedades en 2.0.0 (esquema v2)
+
+La entrega anterior ataba el entrenamiento al alumno y guardaba la ejecución en una colección que
+ninguna vista escribía. La 2.0 separa los tres conceptos y los vuelve a unir en el único punto
+donde el profesor los necesita: **el formulario de asistencia**.
+
+| Antes (v1) | Ahora (v2) |
+|---|---|
+| `routines` atadas a un `studentId` | `trainings` **globales**, compartidas por todos los alumnos |
+| `routineExercises` con un `muscleGroup` (string) | `exercises` de catálogo con `muscleGroups[]` (lista cerrada) |
+| `performedSessions` que nadie escribía | `attendances[].entries[]` — la ejecución real, embebida |
+| Marcas de presencia sin ejercicio ni peso | Cada asistencia lleva series, reps, peso e implemento |
+| Registro manual de pesos, cada vez | **Precarga desde el historial** del alumno |
+| Sin comparación entre sesiones | **Delta en vivo** `+5 kg · +8%` junto al campo de peso |
+| Ejercicios sólo en la plantilla | **Añadir/quitar por sesión**, sin tocar la plantilla |
+| Una rutina por alumno (duplicados) | Una plantilla, muchos alumnos |
+
+Además corrige dos bugs latentes:
+
+- `removeDemo()` filtraba `routineExercises` por un campo `studentId` inexistente, así que los datos
+  demo no se limpiaban del todo. Ahora filtra catálogos por `meta.isDemo` y lo demás por alumno.
+- El registro de asistencia **descartaba en silencio** lo que el usuario acababa de escribir si ya
+  existía una del mismo día. Ahora esa flujo cae en modo edición sobre el registro existente.
+
+### Migración v1 → v2
+
+Es una migración **destructiva por diseño**: el modelo cambió de forma incompatible, así que no hay
+conversión automática. Al abrir la 2.0 con una base v1 presente, el cliente:
+
+1. Mueve `gymtrack:db:v1` a `gymtrack:archive:v1` **byte-idéntico** (con `counts` + `raw`).
+2. Crea `gymtrack:db:v2` vacío.
+3. Muestra un modal one-shot con los conteos v1 y un botón **Descargar copia v1**.
+4. **Datos y configuración** expone después un bloque *"Archivo de la versión anterior (v1)"*
+   con Descargar / Restaurar clave v1 / Eliminar archivo.
+
+`importJSON()` rechaza respaldos `schemaVersion < 2` con un mensaje que apunta a ese bloque.
+
 ## 1. Lo que se implementó
 
 Una aplicación web estática para la administración completa de un gimnasio. **Sin backend, sin frameworks pesados, sin build step**. Todo se ejecuta en el navegador y persiste en `localStorage`.
@@ -14,17 +51,18 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
 |---|---|---|
 | **Dashboard** | ✅ | Cabecera contextual (saludo, fecha, accesos rápidos), 4 KPIs principales (alumnos activos, asistencia hoy, ingresos del mes, cumplimiento), gráfico principal de asistencia semanal, actividad reciente, sección "necesitan atención", gráfico de alumnos activos (6 meses), ingresos por período (6 meses), distribución de niveles (doughnut), barra de pagos y próximos vencimientos |
 | **Alumnos** | ✅ | Listado en grid con búsqueda, filtros (estado, nivel, pagos) y creación/edición. Avatares con iniciales, niveles visuales, próximas mensualidades, frecuencia semanal |
-| **Ficha de alumno** | ✅ | Cabecera con datos, 4 KPIs, pestañas: Resumen · Asistencia · Entrenamientos · Progreso físico · Objetivos · Pagos · Notas · Nivel y logros |
+| **Ficha de alumno** | ✅ | Cabecera con datos, 4 KPIs, pestañas: Resumen · Asistencia · Entrenamientos · Progreso físico · Objetivos · Pagos · Notas · Nivel y logros. La pestaña Entrenamientos es el historial de sesiones con pesos y delta contra la anterior |
 | **Asistencia (global)** | ✅ | KPIs (hoy, semana, mes, top asistentes del mes), gráfico de 30 días, panel "hoy en el gimnasio", historial con búsqueda, registro rápido, exportación Excel |
-| **Entrenamientos** | ✅ | CRUD de rutinas y ejercicios. Asignación a alumnos. Ejercicios con series, reps, peso, descanso, instrucciones |
+| **Registro de asistencia** | ✅ | Modal compartido por los 3 puntos de entrada. Precarga desde el historial del alumno, **delta de peso en vivo**, añadir/quitar ejercicios sólo para esa sesión, reordenar, implemento y nota por ejercicio |
+| **Entrenamientos** | ✅ | Dos pestañas: **Entrenamientos** (plantillas globales compartidas) y **Catálogo de ejercicios** (nombre, observación, grupos musculares múltiples). Ejercicios ordenables dentro de la plantilla |
 | **Progreso físico** | ✅ | Gráficos globales de peso promedio y calorías por sesión, tabla "último registro por alumno" |
 | **Mediciones en ficha** | ✅ | Gráfico histórico por métrica, selector, comparativa entre primera y última lectura, tabla historial completa |
 | **Objetivos** | ✅ | CRUD por alumno, con tipo, valor meta, unidad, fecha objetivo, estado |
 | **Pagos (global)** | ✅ | KPIs (ingresos, pendiente, vencido, total), gráfico de ingresos 6 meses, tabla con filtros y pago directo |
 | **Informes individuales** | ✅ | Constructor con selección de alumno, período, secciones a incluir y comentario del entrenador. Vista previa imprimible. Estilos específicos para impresión (`print.css`). Listas para guardar como PDF desde el navegador |
-| **Datos y configuración** | ✅ | Estado del almacenamiento, exportación JSON, restauración con validación y resumen, exportar/importar Excel (varias entidades), plantillas, datos de demostración instalables y removibles, zona peligrosa |
+| **Datos y configuración** | ✅ | Estado del almacenamiento, exportación JSON, restauración con validación y resumen, exportar/importar Excel (varias entidades), plantillas, datos de demostración instalables y removibles, bloque "Archivo v1" (descargar / restaurar clave / eliminar), zona peligrosa |
 | **Sistema de niveles** | ✅ | 5 niveles (Principiante → Referente). Evaluación exclusiva por **constancia** (total, racha, cumplimiento). Mediciones nunca afectan el nivel. Progreso al siguiente nivel. Insignias (8) por hitos |
-| **Respaldo** | ✅ | JSON completo, validación, migración mínima, metadatos de versión |
+| **Respaldo** | ✅ | JSON completo, validación, metadatos de versión, rechazo explícito de respaldos v1 |
 
 ## 2. Estructura del proyecto
 
@@ -44,9 +82,9 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
 │   │   ├── views.css                       # Estilos específicos por vista
 │   │   └── print.css                       # Estilos @media print para informes
 │   └── js/
-│       ├── config.js                       # Constantes: niveles, badges, default weekly goal
+│       ├── config.js                       # Constantes: niveles, badges, grupos musculares, implementos
 │       ├── utils.js                        # Helpers: fechas, IDs, formato, DOM, validación
-│       ├── storage.js                      # Capa única de persistencia localStorage
+│       ├── storage.js                      # Capa única de persistencia localStorage + archivo v1
 │       ├── icons.js                        # Lucide helpers
 │       ├── router.js                       # Hash router
 │       ├── charts.js                       # Wrapper Chart.js con tema oscuro
@@ -54,8 +92,10 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
 │       ├── app.js                          # Bootstrap y registro de rutas
 │       ├── services/
 │       │   ├── students.js                 # CRUD alumnos
-│       │   ├── attendance.js               # CRUD asistencia
-│       │   ├── workouts.js                 # Rutinas, ejercicios, sesiones
+│       │   ├── exercises.js                # CRUD catálogo de ejercicios (borrado suave)
+│       │   ├── trainings.js                # CRUD plantillas + resolución contra el catálogo
+│       │   ├── entries.js                  # Precarga desde historial + delta de peso (puro, sin DOM)
+│       │   ├── attendance.js               # CRUD asistencia + draft + saveAttendance
 │       │   ├── measurements.js             # Mediciones + agregaciones
 │       │   ├── payments.js                 # Pagos + estado vencido
 │       │   ├── goals.js                    # Objetivos
@@ -70,18 +110,25 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
 │           ├── students.js                 # Listado + creación de alumnos
 │           ├── student-detail.js           # Ficha + 8 pestañas
 │           ├── attendance.js               # Vista global de asistencia
-│           ├── workouts.js                 # Vista global de rutinas
+│           ├── attendance-form.js          # Modal compartido de registro (3 call sites)
+│           ├── workouts.js                 # Entrenamientos + catálogo de ejercicios
 │           ├── progress.js                 # Vista global de progreso físico
 │           ├── payments.js                 # Vista global de pagos
 │           ├── reports.js                  # Generador de informes imprimibles
-│           └── settings.js                 # Datos, respaldo, Excel, demo
+│           └── settings.js                 # Datos, respaldo, Excel, demo, archivo v1
 └── tests/
     ├── smoke.mjs                           # Smoke test (módulos importables)
-    ├── logic.mjs                           # Test de niveles, pagos, seed
+    ├── entries.mjs                         # Tests puros de precarga y delta (20 asserts)
+    ├── logic.mjs                           # Niveles, pagos, seed + 29 asserts de esquema v2
+    ├── audit-imports.mjs                   # Todos los imports resuelven a exports reales
+    ├── globals.mjs                         # Ninguna vista llama a un helper sin importarlo
+    ├── css-classes.mjs                     # Toda clase literal en JS existe en el CSS
+    ├── browser-link.mjs                    # Todos los módulos son importables sin errores
+    ├── sample-structure.mjs                # Estructura de un alumno de ejemplo
     └── backup.mjs                          # Test de backup/restore con validación
 ```
 
-**Total:** 9 módulos JS base + 12 servicios + 9 vistas + 5 CSS + 2 docs. Más de 9.000 líneas.
+**Total:** 9 módulos JS base + 14 servicios + 10 vistas + 5 CSS + 2 docs + 7 tests.
 
 ## 3. Cómo ejecutarla localmente
 
@@ -115,10 +162,11 @@ No requiere build, ni Node, ni configuración adicional. Los CDN externos (Chart
 
 Ver [docs/data-model.md](docs/data-model.md). Incluye:
 
-- Esquema raíz completo (`meta`, `config`, todas las colecciones).
+- Esquema raíz completo (`meta`, `config`, todas las colecciones del esquema v2).
 - Tablas por entidad con tipo y descripción de cada campo.
+- Reglas de precarga (`priorEntriesIndex`) y de delta de peso (`weightDelta`).
 - Reglas del sistema de niveles (constantes en `LEVELS`).
-- Reglas de migración y validación para respaldos.
+- Reglas de migración, archivado v1 y validación de respaldos.
 - Sección de privacidad.
 
 ## 6. Importación / exportación Excel
@@ -127,6 +175,9 @@ Ver [docs/excel-import-export.md](docs/excel-import-export.md). Cubre:
 
 - Plantillas y columnas para alumnos y mediciones.
 - Proceso paso a paso de importación y exportación.
+- La exportación de **Entrenamientos** ahora produce 3 hojas: `Ejercicios`, `Entrenamientos` y
+  `Entrenamiento x Alumno` (una fila por ejercicio por sesión, con `Δ kg` y `Δ %` calculados por la
+  **misma** función `weightDelta()` que usa la interfaz — el Excel no puede contradecir la pantalla).
 - Validación aplicada (duplicados, errores por fila, sin reemplazo silencioso).
 - Formatos de fecha aceptados.
 - Limitaciones importantes (no hay sincronización bidireccional).
@@ -134,14 +185,22 @@ Ver [docs/excel-import-export.md](docs/excel-import-export.md). Cubre:
 ## 7. Respaldo y restauración
 
 - **Exportar (JSON):** desde "Datos y configuración → Respaldo → Exportar base de datos". Genera un archivo `gymtrack_respaldo_<fecha>.json` con todas las colecciones + metadatos (`app`, `schemaVersion`, `appVersion`, `exportedAt`).
-- **Restaurar (JSON):** desde "Datos y configuración → Restpaldo → Restaurar desde archivo". La app valida origen, versión, formato y muestra un resumen antes de pedir confirmación explícita. Si algo falla, los datos existentes quedan intactos.
-- **Migración:** cuando el archivo es de una versión menor del esquema, se rellenan campos faltantes automáticamente.
+- **Restaurar (JSON):** desde "Datos y configuración → Respaldo → Restaurar desde archivo". La app valida origen, versión, formato y muestra un resumen antes de pedir confirmación explícita. Si algo falla, los datos existentes quedan intactos.
+- **Respaldos v1:** rechazados con un mensaje explícito. La app no intenta convertirlos — el modelo
+  es incompatible. La copia v1 vive en `gymtrack:archive:v1` y se gestiona desde el bloque
+  "Archivo de la versión anterior (v1)" de Datos y configuración.
 
 ## 8. Limitaciones conocidas
 
+- **Migración v1 → v2 destructiva.** No hay conversión automática de datos: la v1 se archiva tal
+  cual y la v2 empieza vacía. Reconstruir el historial de la v1 es trabajo manual, aunque la copia
+  queda disponible para abrirla con GymTrack 1.x.
 - **Aplicación local.** No sincroniza entre dispositivos. Para mover la información entre dispositivos se usa el respaldo JSON.
 - **Datos atados al navegador.** Si el usuario borra los datos del sitio (`localStorage.clear()`), cambia de navegador o de equipo, puede perder la información si no tiene un respaldo.
 - **Sin autenticación multiusuario.** No hay roles ni inicio de sesión. Está diseñado para uso por un único administrador.
+- **Sin secuencia fija de ejercicios por alumno.** En la v2 el alumno **no tiene un entrenamiento asignado**:
+  se elige en cada asistencia. Es deliberado (una plantilla la usan todos), pero implica que nada
+  impide que un alumno repita un entrenamiento distinto cada semana sin que el sistema avise.
 - **Informes vía impresión del navegador.** El envío a alumnos se hace manualmente (descargar PDF / imprimir y compartir). No hay integración automática con email o WhatsApp.
 - **Reconocimiento inteligente no destructivo.** No interpolamos valores faltantes en gráficos de mediciones: si falta una fecha, el gráfico muestra un hueco honesto.
 - **Hojas Excel:** se importan como copia; los cambios posteriores en el archivo Excel no se reflejan automáticamente.
@@ -152,6 +211,17 @@ Ver [docs/excel-import-export.md](docs/excel-import-export.md). Cubre:
 ### Sintaxis
 - `node --check` sobre **todos** los módulos JS. Resultado: **0 errores**.
 
+### Lógica pura (Node, sin shims)
+`tests/entries.mjs` ejecuta **20 asserts** sobre el núcleo del cambio:
+- `priorEntriesIndex` — gana la más reciente, excluye la sesión editada, excluye el mismo día,
+  desempata por `timeISO`.
+- `buildDraftEntries` — conserva el orden del entrenamiento, toma la prescripción **del historial**
+  (nunca del catálogo), `null` en la primera vez.
+- `weightDelta` — `+5 kg · +8%`, `-2.5 kg · -3%` con **punto** decimal, `0` en tono apagado,
+  sin porcentaje cuando el previo es 0, tolerante a strings.
+
+Resultado: **ALL OK: 20 passed, 0 failed.**
+
 ### Lógica (Node + localStorage shim)
 `tests/logic.mjs` ejecuta:
 - Creación de alumno.
@@ -161,9 +231,39 @@ Ver [docs/excel-import-export.md](docs/excel-import-export.md). Cubre:
 - Progreso al siguiente nivel: **87%**.
 - Badges obtenidos: `Primer paso`, `10 sesiones`, `Racha 4 semanas`.
 - Pago → marcar como pagado → consulta de `totalReceivedInMonth`.
-- Generación de datos demo: **14 alumnos, 265 asistencias**.
+- Generación de datos demo: **14 alumnos**.
 
-Resultado: **OK**.
+Y **29 asserts** de esquema v2:
+- Round-trip de entradas (snapshots de nombre/grupos, `extra`, `order`).
+- Dupe del mismo día → edita el registro existente, no crea otro.
+- `lastWeightKg` se **recalcula al guardar** (backdating) y es idempotente.
+- El historial sobrevive al borrado del catálogo (borrado suave).
+- `deleteTraining` nulifica `trainingId` y deja intactas las entradas.
+- El borrador precarga desde la última sesión del alumno.
+
+Resultado: **ALL OK: 29 passed, 0 failed.**
+
+### Integridad de módulos
+- `tests/browser-link.mjs` → **28/28 módulos importables** (todos los archivos JS del navegador).
+- `tests/audit-imports.mjs` → **OK — all imports resolve to real exports** (atrapa imports colgados
+  a servicios que ya no existen, el error típico tras un refactor).
+- `tests/globals.mjs` → **OK — 32 módulos sin llamadas a helpers sin importar**. Este chequeo
+  encontró un `$$()` sin importar en la vista de entrenamientos: la vista entera habría fallado
+  en el navegador y ningún test de Node lo detectaba, porque sólo se rompe al renderizar.
+- `tests/css-classes.mjs` → **OK — 263 reglas CSS, toda clase literal en JS existe**. Encontró un
+  `stack-1` inexistente (la utilidad real es `stack-2`), que degradaba el layout en silencio.
+
+### Bugs corregidos durante la implementación
+
+| Bug | Impacto |
+|---|---|
+| `$$()` sin importar en `views/workouts.js` | La vista de entrenamientos no renderizaba |
+| Botones ↑ ↓ ✕ del formulario sin wiring (`dataset.i` vs `dataset.entry`) | No se podía reordenar ni quitar ejercicios |
+| `exerciseIds` se guardaba en orden de catálogo | Editar un entrenamiento reordenaba el plan sin avisar |
+| `$$`/`initialTab` a nivel de módulo | La pestaña del query string sólo funcionaba en la primera navegación |
+| Listeners de clic acumulados en nodos que sobreviven al re-render | Guardar 2 veces → "Editar" abría 2 modales apilados |
+| Grupos musculares mostraban el valor crudo (`piernas`) | El historial mostraba enums, no etiquetas |
+| "Entrenamiento eliminado" también para sesiones libres | Etiqueta incorrecta cuando nunca hubo plantilla |
 
 ### Backup/Restore (Node + localStorage shim)
 `tests/backup.mjs` ejecuta:
@@ -173,13 +273,14 @@ Resultado: **OK**.
 - Rechazo de archivo de otra app (`app !== "GymTrack"`).
 - Rechazo de texto no JSON.
 
-Resultado: **OK**.
+Resultado: **OK.**
 
 ### Servidor estático
 Probado con `python -m http.server`. Todos los assets (`index.html`, `assets/css/*.css`, `assets/js/**/*.js`, `docs/*.md`) responden con **HTTP 200**.
 
 ### Cobertura pendiente (manual / navegador)
 - Render visual del dashboard, ficha y formularios (recomendado: abrir en navegador, instalar datos demo desde "Datos y configuración", navegar entre secciones).
+- Flujo completo de registro de asistencia: precarga → delta en vivo → añadir/quitar ejercicio → guardar → reabrir.
 - Exportación de PDF: usar "Informes → Vista previa → Imprimir / guardar PDF".
 - Importación de un Excel de prueba (la app valida y muestra errores por fila).
 

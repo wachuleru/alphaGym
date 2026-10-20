@@ -3,7 +3,10 @@
    =========================================================== */
 
 import { $, el, fmtDate, todayISO, downloadBlob } from '../utils.js';
-import { exportJSON, importJSON, installSeed, removeDemo, wipe, getState } from '../storage.js';
+import {
+  exportJSON, importJSON, installSeed, removeDemo, wipe, getState,
+  getLegacyArchive, downloadLegacyArchive, restoreLegacyKey, deleteLegacyArchive,
+} from '../storage.js';
 import { APP_NAME, APP_VERSION, SCHEMA_VERSION } from '../config.js';
 import { refreshIcons } from '../icons.js';
 import { openModal, confirmDialog, toast, toastError } from '../components.js';
@@ -13,7 +16,9 @@ const escapeHtml = (s) => String(s || '').replace(/[<>&"']/g, (c) =>
 
 export async function renderSettings() {
   const main = $('#main');
-  const meta = getState().meta;
+  const db = getState();
+  const meta = db.meta;
+  const archive = getLegacyArchive();
   main.innerHTML = `
     <div class="page-head">
       <div class="page-head__row">
@@ -53,11 +58,19 @@ export async function renderSettings() {
               </div>
               <div class="between">
                 <span class="t-muted">Asistencias cargadas</span>
-                <strong>${getState().attendances.length}</strong>
+                <strong>${db.attendances.length}</strong>
+              </div>
+              <div class="between">
+                <span class="t-muted">Ejercicios en catálogo</span>
+                <strong>${db.exercises.length}</strong>
+              </div>
+              <div class="between">
+                <span class="t-muted">Entrenamientos definidos</span>
+                <strong>${db.trainings.length}</strong>
               </div>
               <div class="between">
                 <span class="t-muted">Mediciones cargadas</span>
-                <strong>${getState().measurements.length}</strong>
+                <strong>${db.measurements.length}</strong>
               </div>
               <div class="between">
                 <span class="t-muted">Pagos registrados</span>
@@ -87,6 +100,36 @@ export async function renderSettings() {
             </div>
           </div>
         </article>
+
+        ${archive ? `
+        <article class="card" id="sec-legacy">
+          <header class="card__header">
+            <h3 class="card__title"><i data-lucide="archive"></i> Archivo de la versión anterior (v1)</h3>
+          </header>
+          <div class="card__body stack-4">
+            <p class="muted-block">
+              Al pasar al esquema v2 (catálogo de ejercicios + entrenamientos compartibles) tu base v1 se archivó
+              automáticamente el <strong>${archive.archivedAt ? fmtDate(archive.archivedAt.slice(0,10)) : '—'}</strong>.
+              La copia se guarda aparte y <strong>GymTrack 2.0 no la lee</strong>: es sólo una red de seguridad.
+            </p>
+            <div class="card" style="padding:var(--sp-3) var(--sp-4); background:var(--c-bg-elev-1)">
+              ${Object.entries(archive.counts || {})
+                .filter(([, n]) => typeof n === 'number' && n > 0)
+                .map(([k, n]) => `<div class="between" style="font-size:var(--fs-sm)"><span class="t-muted">${escapeHtml(k)}</span><strong>${n}</strong></div>`)
+                .join('')}
+            </div>
+            <div class="row gap-2" style="flex-wrap:wrap">
+              <button class="btn btn--secondary btn--sm" id="setLegacyDownload"><i data-lucide="download"></i>Descargar copia v1</button>
+              <button class="btn btn--secondary btn--sm" id="setLegacyRestore"><i data-lucide="undo-2"></i>Restaurar clave v1</button>
+              <button class="btn btn--danger btn--sm" id="setLegacyDelete"><i data-lucide="trash-2"></i>Eliminar archivo</button>
+            </div>
+            <p class="t-muted" style="font-size:var(--fs-xs)">
+              "Restaurar clave v1" vuelve a escribir la base antigua en <code>gymtrack:db:v1</code> para que puedas
+              abrirla con GymTrack 1.x. Tus datos v2 no se tocan.
+            </p>
+          </div>
+        </article>
+        ` : ''}
 
         <article class="card" id="sec-excel">
           <header class="card__header"><h3 class="card__title">Importar y exportar Excel</h3></header>
@@ -130,7 +173,7 @@ export async function renderSettings() {
         <article class="card" id="sec-demo">
           <header class="card__header"><h3 class="card__title">Datos de demostración</h3></header>
           <div class="card__body stack-4">
-            <p class="muted-block">Genera alumnos, asistencia, mediciones y pagos de prueba para evaluar la interfaz. Los registros se marcan como <code>isDemo</code> y pueden borrarse después.</p>
+            <p class="muted-block">Genera alumnos, catálogo de ejercicios, entrenamientos, asistencia con pesos, mediciones y pagos de prueba para evaluar la interfaz. Los registros se marcan como <code>isDemo</code> y pueden borrarse después.</p>
             <div class="row gap-2" style="flex-wrap:wrap">
               <button class="btn btn--primary" id="setSeed"><i data-lucide="sparkles"></i>Instalar datos demo</button>
               <button class="btn btn--danger" id="setRemoveDemo"><i data-lucide="trash-2"></i>Eliminar datos demo</button>
@@ -155,7 +198,7 @@ export async function renderSettings() {
         <article class="card">
           <header class="card__header"><h3 class="card__title">Zona peligrosa</h3></header>
           <div class="card__body stack-4">
-            <p class="muted-block">Borrar toda la base de datos eliminará alumnos, asistencia, mediciones, rutinas, objetivos y pagos. Hazlo solo si realmente quieres empezar de cero o vas a restaurar un respaldo a continuación.</p>
+            <p class="muted-block">Borrar toda la base de datos eliminará alumnos, asistencia, ejercicios, entrenamientos, mediciones, objetivos y pagos. Hazlo solo si realmente quieres empezar de cero o vas a restaurar un respaldo a continuación.</p>
             <button class="btn btn--danger" id="setWipe"><i data-lucide="trash"></i>Borrar toda la base</button>
           </div>
         </article>
@@ -189,13 +232,7 @@ function bind() {
     const file = e.target.files[0];
     if (!file) return;
     const text = await file.text();
-    const preview = confirmDialog({
-      title: 'Restaurar respaldo',
-      message: 'Esta operación reemplazará toda la base de datos actual. ¿Continuar?',
-      confirmLabel: 'Sí, reemplazar',
-      confirmKind: 'danger',
-    });
-    // We open a *real* confirm dialog before parsing — see below replacement
+    // restoreFlow parses, shows a summary and asks for confirmation itself.
     restoreFlow(text);
     e.target.value = '';
   });
@@ -237,11 +274,45 @@ function bind() {
     e.target.value = '';
   });
 
+  // Legacy v1 archive (only present after the v1 → v2 migration)
+  $('#setLegacyDownload')?.addEventListener('click', () => {
+    const ok = downloadLegacyArchive();
+    toast({ type: ok ? 'success' : 'error', message: ok ? 'Copia v1 descargada.' : 'No hay archivo v1 disponible.' });
+  });
+  $('#setLegacyRestore')?.addEventListener('click', async () => {
+    const ok = await confirmDialog({
+      title: 'Restaurar la base v1',
+      message: 'GymTrack 2.0 no lee la base v1. Esta acción la escribe de nuevo en la clave "gymtrack:db:v1" para que puedas abrirla con GymTrack 1.x. Tus datos v2 no se tocan.',
+      confirmLabel: 'Restaurar v1',
+      confirmKind: 'secondary',
+    });
+    if (!ok) return;
+    const done = restoreLegacyKey();
+    toast({
+      type: done ? 'success' : 'error',
+      message: done
+        ? 'Base v1 restaurada. Ábrela con GymTrack 1.x.'
+        : 'No se pudo restaurar la base v1.',
+    });
+  });
+  $('#setLegacyDelete')?.addEventListener('click', async () => {
+    const ok = await confirmDialog({
+      title: 'Eliminar el archivo v1',
+      message: 'Se borrará la copia archivada de tu base v1. Si no la descargaste antes, no podrás recuperarla. Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar archivo',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
+    deleteLegacyArchive();
+    toast({ type: 'success', message: 'Archivo v1 eliminado.' });
+    await renderSettings();
+  });
+
   // Demo
   $('#setSeed')?.addEventListener('click', async () => {
     const ok = await confirmDialog({
       title: 'Instalar datos demo',
-      message: 'Se generarán alumnos, asistencia, mediciones y pagos ficticios marcados como demo. ¿Continuar?',
+      message: 'Se generarán alumnos, ejercicios, entrenamientos, asistencia con pesos, mediciones y pagos ficticios marcados como demo. ¿Continuar?',
       confirmLabel: 'Instalar',
       confirmKind: 'primary',
     });
@@ -255,7 +326,7 @@ function bind() {
   $('#setRemoveDemo')?.addEventListener('click', async () => {
     const ok = await confirmDialog({
       title: 'Eliminar datos demo',
-      message: 'Borrarás los alumnos demo y todos sus registros asociados (asistencia, mediciones, pagos, rutinas, objetivos y notas).',
+      message: 'Borrarás los alumnos demo y todos sus registros asociados (asistencia, mediciones, pagos, objetivos y notas), además de los ejercicios y entrenamientos demo. Lo que hayas creado a mano se conserva.',
       confirmLabel: 'Eliminar demo',
       confirmKind: 'danger',
     });
@@ -303,10 +374,10 @@ async function restoreFlow(text) {
   const summary = {
     'Alumnos': (d.students || []).length,
     'Asistencias': (d.attendances || []).length,
+    'Ejercicios': (d.exercises || []).length,
+    'Entrenamientos': (d.trainings || []).length,
     'Mediciones': (d.measurements || []).length,
     'Pagos': (d.payments || []).length,
-    'Rutinas': (d.routines || []).length,
-    'Ejercicios': (d.routineExercises || []).length,
     'Objetivos': (d.goals || []).length,
     'Notas': (d.notes || []).length,
   };

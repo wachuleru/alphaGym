@@ -539,55 +539,10 @@ function buildLevelsChart() {
 
 /* ---------- Quick action: Register attendance ---------- */
 function openAttendanceQuick() {
-  const db = getState();
-  const form = el('div', { class: 'stack-4' });
-
-  const wrap = el('div', { class: 'field' });
-  wrap.appendChild(el('label', { class: 'field__label' }, 'Alumno'));
-  const sel = el('select', { class: 'select', id: 'qaStudent', required: 'true' });
-  const placeholder = el('option', { value: '' }, 'Selecciona un alumno…');
-  sel.appendChild(placeholder);
-  for (const s of db.students.filter((x) => x.status === 'active')) {
-    const opt = el('option', { value: s.id }, fullName(s));
-    sel.appendChild(opt);
-  }
-  wrap.appendChild(sel);
-  form.appendChild(wrap);
-
-  const dateWrap = el('div', { class: 'field' });
-  dateWrap.appendChild(el('label', { class: 'field__label' }, 'Fecha'));
-  const dateInput = el('input', { class: 'input', type: 'date', id: 'qaDate', value: todayISO() });
-  dateWrap.appendChild(dateInput);
-  form.appendChild(dateWrap);
-
-  const notesWrap = el('div', { class: 'field' });
-  notesWrap.appendChild(el('label', { class: 'field__label' }, 'Observaciones (opcional)'));
-  const ta = el('textarea', { class: 'textarea', id: 'qaNotes', rows: '3', placeholder: 'Notas de la sesión…' });
-  notesWrap.appendChild(ta);
-  form.appendChild(notesWrap);
-
-  openModal({
-    title: 'Registrar asistencia',
-    size: 'sm',
-    body: form,
-    actions: [
-      { label: 'Cancelar', kind: 'ghost' },
-      {
-        label: 'Registrar', kind: 'primary',
-        onClick: async () => {
-          const studentId = sel.value;
-          if (!studentId) {
-            toast({ type: 'warning', message: 'Selecciona un alumno.' });
-            return false;
-          }
-          const mod = await import('../services/attendance.js');
-          mod.register({ studentId, dateISO: dateInput.value, notes: ta.value });
-          toast({ type: 'success', message: 'Asistencia registrada.' });
-          renderDashboard();
-        },
-      },
-    ],
-  });
+  // Delegado al formulario compartido (schema v2: preload + delta en vivo).
+  import('./attendance-form.js').then((mod) =>
+    mod.openAttendanceForm({ onSaved: () => renderDashboard() })
+  );
 }
 
 /* ---------- Quick action: New measurement ---------- */
