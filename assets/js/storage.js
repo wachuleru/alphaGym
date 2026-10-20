@@ -32,6 +32,7 @@ function emptyDB() {
     attendances: [],
     exercises: [],
     trainings: [],
+    trainingCategories: [],
     measurements: [],
     goals: [],
     payments: [],
@@ -180,6 +181,7 @@ export function importJSON(text) {
     attendances: (data.attendances || []).length,
     exercises: (data.exercises || []).length,
     trainings: (data.trainings || []).length,
+    trainingCategories: (data.trainingCategories || []).length,
     measurements: (data.measurements || []).length,
     goals: (data.goals || []).length,
     payments: (data.payments || []).length,
@@ -218,6 +220,7 @@ export function removeDemo() {
   // Catalog / global templates: filter by meta.isDemo (they have no studentId).
   db.exercises = (db.exercises || []).filter((x) => !isDemo(x));
   db.trainings = (db.trainings || []).filter((t) => !isDemo(t));
+  db.trainingCategories = (db.trainingCategories || []).filter((c) => !isDemo(c));
 
   // Student-scoped collections: drop demo students, cascade the rest.
   db.students = (db.students || []).filter((s) => !isDemo(s));

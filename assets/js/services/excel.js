@@ -10,8 +10,9 @@ import { listMeasurements, MEASURE_FIELDS } from './measurements.js';
 import { listPayments } from './payments.js';
 import { listExercises as listAllExercises } from './exercises.js';
 import { listTrainings, exercisesOf as exercisesOfTraining } from './trainings.js';
+import { listCategories } from './categories.js';
 import { listGoals } from './goals.js';
-import { MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE } from '../config.js';
+import { MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE, NO_CATEGORY_LABEL } from '../config.js';
 import { weightDelta } from './entries.js';
 
 /* ===========================================================
@@ -158,12 +159,28 @@ export function exportWorkouts() {
   ]);
 
   /* Sheet 2: Trainings */
-  const headerTraining = ['ID', 'Nombre', 'Objetivo', 'Observación', 'Estado', 'N° ejercicios', 'Ejercicios (en orden)'];
-  const rowsTraining = listTrainings({ includeArchived: true }).map((t) => {
+  const catById = new Map(listCategories({ includeArchived: true }).map((c) => [c.id, c]));
+  const catLabel = (id) => (id && catById.has(id) ? catById.get(id).name : NO_CATEGORY_LABEL);
+
+  const headerCategory = ['ID', 'Nombre', 'Color', 'Observación', 'Estado', 'Entrenamientos', 'Fecha creación'];
+  const allTrainings = listTrainings({ includeArchived: true });
+  const rowsCategory = listCategories({ includeArchived: true }).map((c) => [
+    c.id,
+    c.name,
+    c.color || '',
+    c.observation || '',
+    c.status,
+    allTrainings.filter((t) => t.categoryId === c.id).length,
+    c.createdAt || '',
+  ]);
+
+  const headerTraining = ['ID', 'Nombre', 'Categoría', 'Objetivo', 'Observación', 'Estado', 'N° ejercicios', 'Ejercicios (en orden)'];
+  const rowsTraining = allTrainings.map((t) => {
     const ex = exercisesOfTraining(t.id);
     return [
       t.id,
       t.name,
+      catLabel(t.categoryId),
       t.objective || '',
       t.observation || '',
       t.status,
@@ -193,12 +210,13 @@ export function exportWorkouts() {
   }
 
   const headerAtt = [
-    'Fecha', 'Alumno', 'Entrenamiento', 'Ejercicio', 'Grupos', 'Series', 'Repeticiones',
+    'Fecha', 'Alumno', 'Categoría', 'Entrenamiento', 'Ejercicio', 'Grupos', 'Series', 'Repeticiones',
     'Implemento', 'Peso (kg)', 'Peso anterior (kg)', 'Δ kg', 'Δ %', 'Añadido', 'Observación',
   ];
   const rowsAtt = [];
   for (const a of sorted) {
     const s = studentById.get(a.studentId);
+    const t = a.trainingId ? trainingById.get(a.trainingId) : null;
     for (const e of (a.entries || [])) {
       const prior = priorByStudent.get(a.studentId)?.get(e.exerciseId) ?? null;
       const cur = typeof e.weightKg === 'number' ? e.weightKg : null;
@@ -209,6 +227,7 @@ export function exportWorkouts() {
       rowsAtt.push([
         a.dateISO,
         s ? studentFullName(s) : '',
+        t ? catLabel(t.categoryId) : '',
         trainingLabel(a),
         e.name || (exById.get(e.exerciseId)?.name) || 'Ejercicio eliminado',
         groups,
@@ -230,6 +249,7 @@ export function exportWorkouts() {
 
   const wb = checkXLSX().utils.book_new();
   checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headerCatalog, rowsCatalog), 'Ejercicios');
+  checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headerCategory, rowsCategory), 'Categorías');
   checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headerTraining, rowsTraining), 'Entrenamientos');
   checkXLSX().utils.book_append_sheet(wb, aoaToSheet(headerAtt, rowsAtt), 'Entrenamiento x Alumno');
   downloadWorkbook(wb, `gymtrack_entrenamientos_${todayISO()}.xlsx`);

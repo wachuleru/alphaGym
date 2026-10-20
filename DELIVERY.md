@@ -1,6 +1,34 @@
 # GymTrack — Resumen de entrega
 
-## 0. Novedades en 2.0.0 (esquema v2)
+## 0. Novedades en 2.1.0 (categorías de entrenamiento)
+
+La 2.1 agrega una **capa de agrupación** encima de los entrenamientos, a pedido explícito: *"igual
+es bueno tener una categoría adicional que agrupe entrenamientos"*. La precisión que delimita el
+pedido es que **una categoría no es un plan**: no tiene ejercicios, semanas, progresión ni fechas.
+Sólo ordena y filtra rutinas ya existentes.
+
+| Decisión | Valor |
+|---|---|
+| Modelo | Colección gestionable `trainingCategories[]` con CRUD propio en *Entrenamientos → Categorías* |
+| Agrupación | La lista de entrenamientos se renderiza en bloques por categoría |
+| Filtro | Select "Categoría" con **Todas** / cada categoría / **Sin categoría** (con conteos) |
+| En la asistencia | Selector en cascada **Categoría → Entrenamiento** |
+| Cambio de esquema | **Ninguno.** `SCHEMA_VERSION` sigue en 2: es aditivo y `load()` rellena la colección |
+
+Garantías que la implementación asegura:
+
+- **Borrar una categoría nunca borra un entrenamiento.** Se archiva la categoría y sus
+  entrenamientos caen a "Sin categoría".
+- Un `categoryId` colgante (categoría borrada a mano en el JSON) degrada a "Sin categoría" en vez
+  de hacer desaparecer el entrenamiento de la lista.
+- La categoría se escribe **una sola vez** en el `attendances`: nunca se copia al snapshot, porque
+  la asistencia referencia el entrenamiento, y el entrenamiento referencia la categoría.
+
+Archivos tocados: `services/categories.js` (nuevo), `services/trainings.js`, `services/seed.js`,
+`services/excel.js`, `services/reports.js`, `storage.js`, `config.js`, `views/workouts.js`,
+`views/attendance-form.js`, `views/student-detail.js`, `views/settings.js`, `css/views.css`.
+
+## 0.b. Novedades en 2.0.0 (esquema v2)
 
 La entrega anterior ataba el entrenamiento al alumno y guardaba la ejecución en una colección que
 ninguna vista escribía. La 2.0 separa los tres conceptos y los vuelve a unir en el único punto
@@ -53,8 +81,8 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
 | **Alumnos** | ✅ | Listado en grid con búsqueda, filtros (estado, nivel, pagos) y creación/edición. Avatares con iniciales, niveles visuales, próximas mensualidades, frecuencia semanal |
 | **Ficha de alumno** | ✅ | Cabecera con datos, 4 KPIs, pestañas: Resumen · Asistencia · Entrenamientos · Progreso físico · Objetivos · Pagos · Notas · Nivel y logros. La pestaña Entrenamientos es el historial de sesiones con pesos y delta contra la anterior |
 | **Asistencia (global)** | ✅ | KPIs (hoy, semana, mes, top asistentes del mes), gráfico de 30 días, panel "hoy en el gimnasio", historial con búsqueda, registro rápido, exportación Excel |
-| **Registro de asistencia** | ✅ | Modal compartido por los 3 puntos de entrada. Precarga desde el historial del alumno, **delta de peso en vivo**, añadir/quitar ejercicios sólo para esa sesión, reordenar, implemento y nota por ejercicio |
-| **Entrenamientos** | ✅ | Dos pestañas: **Entrenamientos** (plantillas globales compartidas) y **Catálogo de ejercicios** (nombre, observación, grupos musculares múltiples). Ejercicios ordenables dentro de la plantilla |
+| **Registro de asistencia** | ✅ | Modal compartido por los 3 puntos de entrada. Precarga desde el historial del alumno, **delta de peso en vivo**, añadir/quitar ejercicios sólo para esa sesión, reordenar, implemento y nota por ejercicio, y selector en cascada Categoría → Entrenamiento |
+| **Entrenamientos** | ✅ | Tres pestañas: **Entrenamientos** (plantillas globales, agrupadas y filtrables por categoría), **Categorías** (CRUD de la capa de agrupación) y **Catálogo de ejercicios** (nombre, observación, grupos musculares múltiples). Ejercicios ordenables dentro de la plantilla |
 | **Progreso físico** | ✅ | Gráficos globales de peso promedio y calorías por sesión, tabla "último registro por alumno" |
 | **Mediciones en ficha** | ✅ | Gráfico histórico por métrica, selector, comparativa entre primera y última lectura, tabla historial completa |
 | **Objetivos** | ✅ | CRUD por alumno, con tipo, valor meta, unidad, fecha objetivo, estado |
@@ -82,7 +110,7 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
 │   │   ├── views.css                       # Estilos específicos por vista
 │   │   └── print.css                       # Estilos @media print para informes
 │   └── js/
-│       ├── config.js                       # Constantes: niveles, badges, grupos musculares, implementos
+│       ├── config.js                       # Constantes: niveles, badges, grupos musculares, implementos, tonos de categoría
 │       ├── utils.js                        # Helpers: fechas, IDs, formato, DOM, validación
 │       ├── storage.js                      # Capa única de persistencia localStorage + archivo v1
 │       ├── icons.js                        # Lucide helpers
@@ -93,6 +121,7 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
 │       ├── services/
 │       │   ├── students.js                 # CRUD alumnos
 │       │   ├── exercises.js                # CRUD catálogo de ejercicios (borrado suave)
+│       │   ├── categories.js               # CRUD categorías + agrupación de entrenamientos
 │       │   ├── trainings.js                # CRUD plantillas + resolución contra el catálogo
 │       │   ├── entries.js                  # Precarga desde historial + delta de peso (puro, sin DOM)
 │       │   ├── attendance.js               # CRUD asistencia + draft + saveAttendance
@@ -111,7 +140,7 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
 │           ├── student-detail.js           # Ficha + 8 pestañas
 │           ├── attendance.js               # Vista global de asistencia
 │           ├── attendance-form.js          # Modal compartido de registro (3 call sites)
-│           ├── workouts.js                 # Entrenamientos + catálogo de ejercicios
+│           ├── workouts.js                 # Entrenamientos + categorías + catálogo de ejercicios
 │           ├── progress.js                 # Vista global de progreso físico
 │           ├── payments.js                 # Vista global de pagos
 │           ├── reports.js                  # Generador de informes imprimibles
@@ -119,7 +148,7 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
 └── tests/
     ├── smoke.mjs                           # Smoke test (módulos importables)
     ├── entries.mjs                         # Tests puros de precarga y delta (20 asserts)
-    ├── logic.mjs                           # Niveles, pagos, seed + 29 asserts de esquema v2
+    ├── logic.mjs                           # Niveles, pagos, seed + 61 asserts de esquema v2 y categorías
     ├── audit-imports.mjs                   # Todos los imports resuelven a exports reales
     ├── globals.mjs                         # Ninguna vista llama a un helper sin importarlo
     ├── css-classes.mjs                     # Toda clase literal en JS existe en el CSS
@@ -128,7 +157,7 @@ Diseño propio "Sport Premium" — fondo midnight navy (`#0a1124`), acento dorad
     └── backup.mjs                          # Test de backup/restore con validación
 ```
 
-**Total:** 9 módulos JS base + 14 servicios + 10 vistas + 5 CSS + 2 docs + 7 tests.
+**Total:** 9 módulos JS base + 15 servicios + 10 vistas + 5 CSS + 2 docs + 8 tests.
 
 ## 3. Cómo ejecutarla localmente
 
@@ -175,9 +204,10 @@ Ver [docs/excel-import-export.md](docs/excel-import-export.md). Cubre:
 
 - Plantillas y columnas para alumnos y mediciones.
 - Proceso paso a paso de importación y exportación.
-- La exportación de **Entrenamientos** ahora produce 3 hojas: `Ejercicios`, `Entrenamientos` y
-  `Entrenamiento x Alumno` (una fila por ejercicio por sesión, con `Δ kg` y `Δ %` calculados por la
-  **misma** función `weightDelta()` que usa la interfaz — el Excel no puede contradecir la pantalla).
+- La exportación de **Entrenamientos** ahora produce 4 hojas: `Ejercicios`, `Categorías`,
+  `Entrenamientos` y `Entrenamiento x Alumno` (una fila por ejercicio por sesión, con `Δ kg` y
+  `Δ %` calculados por la **misma** función `weightDelta()` que usa la interfaz — el Excel no puede
+  contradecir la pantalla).
 - Validación aplicada (duplicados, errores por fila, sin reemplazo silencioso).
 - Formatos de fecha aceptados.
 - Limitaciones importantes (no hay sincronización bidireccional).
@@ -201,6 +231,9 @@ Ver [docs/excel-import-export.md](docs/excel-import-export.md). Cubre:
 - **Sin secuencia fija de ejercicios por alumno.** En la v2 el alumno **no tiene un entrenamiento asignado**:
   se elige en cada asistencia. Es deliberado (una plantilla la usan todos), pero implica que nada
   impide que un alumno repita un entrenamiento distinto cada semana sin que el sistema avise.
+- **Las categorías no planifican.** Agrupan y filtran; no guardan periodicidad, progresión ni
+  objetivos por período. Si más adelante hace falta "esta categoría dura 8 semanas y sube 2,5 kg",
+  eso es otra entidad, no un campo más de la categoría.
 - **Informes vía impresión del navegador.** El envío a alumnos se hace manualmente (descargar PDF / imprimir y compartir). No hay integración automática con email o WhatsApp.
 - **Reconocimiento inteligente no destructivo.** No interpolamos valores faltantes en gráficos de mediciones: si falta una fecha, el gráfico muestra un hueco honesto.
 - **Hojas Excel:** se importan como copia; los cambios posteriores en el archivo Excel no se reflejan automáticamente.
@@ -233,18 +266,25 @@ Resultado: **ALL OK: 20 passed, 0 failed.**
 - Pago → marcar como pagado → consulta de `totalReceivedInMonth`.
 - Generación de datos demo: **14 alumnos**.
 
-Y **29 asserts** de esquema v2:
+Y **61 asserts** de esquema v2 (los últimos 32 son de categorías):
 - Round-trip de entradas (snapshots de nombre/grupos, `extra`, `order`).
 - Dupe del mismo día → edita el registro existente, no crea otro.
 - `lastWeightKg` se **recalcula al guardar** (backdating) y es idempotente.
 - El historial sobrevive al borrado del catálogo (borrado suave).
 - `deleteTraining` nulifica `trainingId` y deja intactas las entradas.
 - El borrador precarga desde la última sesión del alumno.
+- CRUD de categorías: nombre recortado, tono inválido cae al primero de `BADGE_TONES`.
+- `listTrainings({categoryId})`: **`null` es un filtro real** ("Sin categoría"), y omitir la clave no filtra.
+- `updateTraining` sin `categoryId` conserva el anterior; con `categoryId: null` desasigna.
+- `groupTrainingsByCategory`: ordena alfabéticamente, deja "Sin categoría" al final y **degrada a ese
+  grupo un `categoryId` colgante** en vez de esconder el entrenamiento.
+- `deleteCategory` archiva, **no borra ningún entrenamiento**, y los desasigna a `null`.
+- El seed demo trae 3 categorías, 3 entrenamientos con categoría válida y 1 sin categoría.
 
-Resultado: **ALL OK: 29 passed, 0 failed.**
+Resultado: **ALL OK: 61 passed, 0 failed.**
 
 ### Integridad de módulos
-- `tests/browser-link.mjs` → **28/28 módulos importables** (todos los archivos JS del navegador).
+- `tests/browser-link.mjs` → **30/30 módulos importables** (todos los archivos JS del navegador).
 - `tests/audit-imports.mjs` → **OK — all imports resolve to real exports** (atrapa imports colgados
   a servicios que ya no existen, el error típico tras un refactor).
 - `tests/globals.mjs` → **OK — 32 módulos sin llamadas a helpers sin importar**. Este chequeo
@@ -264,6 +304,8 @@ Resultado: **ALL OK: 29 passed, 0 failed.**
 | Listeners de clic acumulados en nodos que sobreviven al re-render | Guardar 2 veces → "Editar" abría 2 modales apilados |
 | Grupos musculares mostraban el valor crudo (`piernas`) | El historial mostraba enums, no etiquetas |
 | "Entrenamiento eliminado" también para sesiones libres | Etiqueta incorrecta cuando nunca hubo plantilla |
+| `listTrainings({categoryId})` no distinguía `null` de "sin filtro" | El filtro "Sin categoría" devolvía la lista completa |
+| Selector de categoría dejaba un entrenamiento invisible | Se seleccionaba un entrenamiento fuera del filtro y quedaba colgado; ahora cae a "Sesión libre" con aviso |
 
 ### Backup/Restore (Node + localStorage shim)
 `tests/backup.mjs` ejecuta:
@@ -281,6 +323,9 @@ Probado con `python -m http.server`. Todos los assets (`index.html`, `assets/css
 ### Cobertura pendiente (manual / navegador)
 - Render visual del dashboard, ficha y formularios (recomendado: abrir en navegador, instalar datos demo desde "Datos y configuración", navegar entre secciones).
 - Flujo completo de registro de asistencia: precarga → delta en vivo → añadir/quitar ejercicio → guardar → reabrir.
+- **Categorías:** crear una → asignarla a un entrenamiento → comprobar el filtro y los bloques en la
+  lista → elegirla en el registro de asistencia y verificar que sólo se ofrecen los de esa categoría →
+  borrarla y confirmar que los entrenamientos siguen ahí bajo "Sin categoría".
 - Exportación de PDF: usar "Informes → Vista previa → Imprimir / guardar PDF".
 - Importación de un Excel de prueba (la app valida y muestra errores por fila).
 

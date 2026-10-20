@@ -51,27 +51,45 @@ const EXERCISES_DEMO = [
   { name: 'Remo TRX',            muscleGroups: ['espalda'],                   implement: 'bandas',     sets: '3', reps: '12',    rest: 45,  baseWeight: 0 },
   { name: 'Face pulls',          muscleGroups: ['espalda'],                   implement: 'cable',      sets: '3', reps: '15',    rest: 45,  baseWeight: 18 },
   { name: 'Extensión cuádriceps',muscleGroups: ['piernas'],                   implement: 'maquina',    sets: '3', reps: '12',    rest: 60,  baseWeight: 50 },
+  { name: 'Dead hang',           muscleGroups: ['espalda', 'brazos'],         implement: 'peso_corporal', sets: '3', reps: '30s', rest: 45,  baseWeight: 0 },
+];
+
+/** Categories that group the demo trainings (the optional layer above them). */
+const CATEGORIES_DEMO = [
+  { key: 'superior', name: 'Tren superior', color: 'accent',  observation: 'Empuje y tirón' },
+  { key: 'inferior', name: 'Tren inferior', color: 'info',    observation: 'Patrón dominante de rodilla y cadera' },
+  { key: 'fullbody', name: 'Full body',     color: 'success', observation: 'Sesiones cortas para días con poco tiempo' },
 ];
 
 /** Training templates (decoupled from students). */
 const TRAININGS_DEMO = [
   {
     name: 'Tren superior · fuerza',
+    categoryKey: 'superior',
     objective: 'Hipertrofia',
     observation: 'Calentamiento previo 10 min',
     exerciseNames: ['Press banca', 'Remo con barra', 'Press inclinado', 'Curl bíceps', 'Tríceps polea', 'Face pulls'],
   },
   {
     name: 'Tren inferior · potencia',
+    categoryKey: 'inferior',
     objective: 'Fuerza',
     observation: 'Priorizar carga; bajar a 8 reps si falla la técnica',
     exerciseNames: ['Sentadilla', 'Peso muerto rumano', 'Prensa', 'Hip thrust', 'Extensión cuádriceps'],
   },
   {
     name: 'Full body · resistencia',
+    categoryKey: 'fullbody',
     objective: 'Resistencia',
     observation: 'Pausa mínima entre series',
     exerciseNames: ['Kettlebell swings', 'Dominadas', 'Remo TRX', 'Plancha'],
+  },
+  {
+    name: 'Core y movilidad',
+    categoryKey: null,
+    objective: 'Prevención',
+    observation: 'Sin categoría a propósito: muestra el grupo "Sin categoría"',
+    exerciseNames: ['Plancha', 'Dead hang'],
   },
 ];
 
@@ -180,7 +198,7 @@ function fromISODateHelper(s) {
   return new Date(y, m - 1, d);
 }
 
-/** Build training records first (need IDs to assign to attendances). */
+/** Build catalog + categories + trainings (need their IDs to assign to attendances). */
 function buildTrainings() {
   const cats = EXERCISES_DEMO.map((ex) => {
     const id = uid('exc');
@@ -198,6 +216,17 @@ function buildTrainings() {
   });
   const catByName = new Map(cats.map((c) => [c.name, c]));
 
+  const categories = CATEGORIES_DEMO.map((c) => ({
+    id: uid('cat'),
+    name: c.name,
+    observation: c.observation,
+    color: c.color,
+    status: 'active',
+    createdAt: todayISO(),
+    meta: { createdAt: new Date().toISOString(), isDemo: true },
+  }));
+  const catByKey = new Map(categories.map((c, i) => [CATEGORIES_DEMO[i].key, c.id]));
+
   const trainings = TRAININGS_DEMO.map((t) => {
     const exerciseIds = t.exerciseNames.map((n) => catByName.get(n).id);
     return {
@@ -205,6 +234,7 @@ function buildTrainings() {
       name: t.name,
       objective: t.objective,
       observation: t.observation,
+      categoryId: t.categoryKey ? catByKey.get(t.categoryKey) : null,
       exerciseIds,
       status: 'active',
       createdAt: toISODate(new Date()),
@@ -212,7 +242,7 @@ function buildTrainings() {
     };
   });
 
-  return { exercises: cats, trainings };
+  return { exercises: cats, trainings, categories };
 }
 
 /**
@@ -269,7 +299,7 @@ function genAttendancesWithEntries(studentId, trainings, exercises) {
 
 /** Main seed generator. Returns a full DB-shaped object marked with isDemo. */
 export function buildSeed() {
-  const { exercises, trainings } = buildTrainings();
+  const { exercises, trainings, categories } = buildTrainings();
   const studentRecords = [];
   const attendanceRecords = [];
   const measurementRecords = [];
@@ -343,7 +373,7 @@ export function buildSeed() {
   return {
     meta: {
       version: 2,
-      appVersion: '2.0.0',
+      appVersion: '2.1.0',
       appName: 'GymTrack',
       createdAt: new Date().toISOString(),
       lastExportAt: null,
@@ -360,6 +390,7 @@ export function buildSeed() {
     students: studentRecords,
     attendances: attendanceRecords,
     exercises,
+    trainingCategories: categories,
     trainings,
     measurements: measurementRecords,
     goals: goalRecords,

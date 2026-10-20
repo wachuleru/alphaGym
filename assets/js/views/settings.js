@@ -65,6 +65,10 @@ export async function renderSettings() {
                 <strong>${db.exercises.length}</strong>
               </div>
               <div class="between">
+                <span class="t-muted">Categorías de entrenamiento</span>
+                <strong>${(db.trainingCategories || []).length}</strong>
+              </div>
+              <div class="between">
                 <span class="t-muted">Entrenamientos definidos</span>
                 <strong>${db.trainings.length}</strong>
               </div>

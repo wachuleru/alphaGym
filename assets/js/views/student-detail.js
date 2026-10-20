@@ -9,6 +9,7 @@ import { listMeasurements, MEASURE_FIELDS, getMeasureLabel, getMeasureUnit, last
 import { computeIMC, classifyIMC, computeICE, classifyICE, computeICC, classifyICC, IMC_BANDS } from '../services/health.js';
 import { forStudent as paymentsFor, forStudent as paymentsForStudent } from '../services/payments.js';
 import { findTraining } from '../services/trainings.js';
+import { findCategory } from '../services/categories.js';
 import { weightDelta } from '../services/entries.js';
 import { openAttendanceForm } from './attendance-form.js';
 import { forStudent as goalsForStudent, createGoal, deleteGoal } from '../services/goals.js';
@@ -16,7 +17,7 @@ import { forStudent as notesForStudent, createNote, updateNote, deleteNote } fro
 import {
   computeStudentMetrics, determineLevel, progressToNext, earnedBadges, allBadgesWithStatus,
 } from '../services/levels.js';
-import { LEVELS, MUSCLE_GROUP_BY_VALUE } from '../config.js';
+import { LEVELS, MUSCLE_GROUP_BY_VALUE, NO_CATEGORY_LABEL } from '../config.js';
 import { openModal, confirmDialog, toast, toastError } from '../components.js';
 import { refreshIcons } from '../icons.js';
 import { lineChart, barChart, doughnutChart, destroyChart, waitChart } from '../charts.js';
@@ -529,6 +530,8 @@ function attendanceCard(attendance) {
       </div>`;
   }).join('');
 
+  const cat = training?.categoryId ? findCategory(training.categoryId) : null;
+
   return `
     <article class="routine-card">
       <header class="routine-card__head">
@@ -536,6 +539,12 @@ function attendanceCard(attendance) {
           <div class="stack">
             <span class="routine-card__title">${escapeHtml(title)} · ${fmtDate(attendance.dateISO)} ${fmtTime(attendance.timeISO)}</span>
             <span class="routine-card__sub">${attendance.entries.length} ejercicio(s) · ${escapeHtml(obsTitle || training?.objective || '—')}</span>
+            ${training ? `<div class="row gap-2" style="flex-wrap:wrap;margin-top:6px">
+              ${cat
+                ? `<span class="badge badge--${escapeHtml(cat.color)}"><i data-lucide="folder"></i>${escapeHtml(cat.name)}</span>`
+                : `<span class="badge badge--muted">${escapeHtml(NO_CATEGORY_LABEL)}</span>`}
+              ${training.objective ? `<span class="badge badge--info">${escapeHtml(training.objective)}</span>` : ''}
+            </div>` : ''}
           </div>
         </div>
         <div class="row gap-2">

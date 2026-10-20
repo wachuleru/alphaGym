@@ -6,9 +6,13 @@ import { getState, setState } from '../storage.js';
 import { uid, todayISO } from '../utils.js';
 import { listExercises } from './exercises.js';
 
-export function listTrainings({ includeArchived = false } = {}) {
+export function listTrainings({ includeArchived = false, categoryId } = {}) {
   const all = getState().trainings || [];
-  return includeArchived ? all : all.filter((t) => t.status !== 'archived');
+  let list = includeArchived ? all : all.filter((t) => t.status !== 'archived');
+  // `categoryId: null` is a meaningful filter ("Sin categoría"), so only skip
+  // when the key was not passed at all.
+  if (categoryId !== undefined) list = list.filter((t) => (t.categoryId || null) === categoryId);
+  return list;
 }
 
 export function findTraining(id) {
@@ -38,12 +42,13 @@ export function exercisesOf(trainingId) {
   });
 }
 
-export function createTraining({ name, objective = '', observation = '', exerciseIds = [], status = 'active' } = {}) {
+export function createTraining({ name, objective = '', observation = '', categoryId = null, exerciseIds = [], status = 'active' } = {}) {
   const t = {
     id: uid('trn'),
     name: name || 'Nuevo entrenamiento',
     objective: objective || '',
     observation: observation || '',
+    categoryId: categoryId || null,
     exerciseIds: Array.isArray(exerciseIds) ? [...exerciseIds] : [],
     status,
     createdAt: todayISO(),
@@ -61,6 +66,7 @@ export function updateTraining(id, patch) {
         ? {
             ...t,
             ...patch,
+            categoryId: 'categoryId' in patch ? (patch.categoryId || null) : t.categoryId,
             exerciseIds: Array.isArray(patch.exerciseIds) ? [...patch.exerciseIds] : t.exerciseIds,
           }
         : t

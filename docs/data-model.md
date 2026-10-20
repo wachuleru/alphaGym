@@ -9,12 +9,14 @@
 - **Persistencia local:** `localStorage` del navegador. Sin servidor.
 - **Archivo de la versión anterior:** `gymtrack:archive:v1` (ver [Migración v1 → v2](#migración-v1--v2)).
 
-## Los tres conceptos
+## Los tres conceptos (+ la categoría)
 
-La v2 separa tres cosas que antes estaban mezcladas:
+La v2 separa tres cosas que antes estaban mezcladas, y la 2.1 agrega una cuarta capa **opcional**
+por encima de los entrenamientos:
 
 | Concepto | Colección | Pertenece a un alumno? |
 |---|---|---|
+| **Categoría de entrenamiento** | `trainingCategories` | No — sólo agrupa |
 | **Catálogo de ejercicios** | `exercises` | No — es global y reutilizable |
 | **Plantilla de entrenamiento** | `trainings` | No — la comparten todos los alumnos |
 | **La sesión realmente realizada** | `attendances[].entries[]` | Sí — es el historial de ese alumno |
@@ -23,12 +25,20 @@ El punto donde se unen es el **formulario de asistencia**: eliges alumno + entre
 arma las filas con lo que ese alumno hizo la última vez.
 
 ```
+trainingCategories ──< trainings.categoryId
+                            │
 exercises ──< trainings.exerciseIds[]        (N:M, el orden es el índice del array)
                             │
                             │ trainingId
                             ▼
 students ──< attendances ──< entries[] ──> exercises  (snapshot: name + muscleGroups)
 ```
+
+**Qué es y qué no es una categoría.** Es una etiqueta de agrupación para que una lista de
+entrenamientos no sea una bolsa única: "Tren superior", "Tren inferior", "Full body", "Cardio".
+No tiene ejercicios, ni series, ni semanas, ni progresión, ni fechas — **no es un plan**. Sólo
+ordena y filtra. Un entrenamiento puede no tener categoría (`categoryId: null`) y queda bajo el
+grupo **Sin categoría**, que siempre se muestra al final.
 
 ## Estructura raíz
 
@@ -40,6 +50,7 @@ students ──< attendances ──< entries[] ──> exercises  (snapshot: nam
   "attendances":         [],        // Asistencias registradas (cada una con entries[])
   "exercises":           [],        // Catálogo reutilizable de ejercicios
   "trainings":           [],        // Plantillas de entrenamiento (globales)
+  "trainingCategories":  [],        // Agrupación de entrenamientos (añadida en 2.1)
   "measurements":        [],        // Mediciones físicas (peso, medidas, calorías)
   "goals":               [],        // Objetivos individuales
   "payments":            [],        // Pagos / mensualidades
@@ -171,6 +182,30 @@ Global y reutilizable: la misma fila la usan todos los alumnos y todos los entre
 Un ejercicio puede estar en **varios** a la vez (Dominadas → `espalda` + `brazos`), cosa que el
 modelo v1 no podía expresar porque guardaba un único string.
 
+### `trainingCategories` — Categorías de entrenamiento (2.1)
+
+Colección **gestionable** (CRUD completo desde *Entrenamientos → Categorías*), no una lista fija en
+config. Agrupa rutinas; no lleva ejercicios ni datos de ejecución.
+
+| Campo         | Tipo     | Descripción                                                              |
+|---------------|----------|--------------------------------------------------------------------------|
+| `id`          | string   | `cat_xxxxxx`.                                                            |
+| `name`        | string   | Etiqueta ("Tren superior"). Se recorta a 60 caracteres.                  |
+| `observation` | string   | Nota descriptiva de la categoría.                                        |
+| `color`       | string   | Tono de badge: `accent` · `info` · `success` · `warning` · `muted`.     |
+| `status`      | string   | `active` · `archived`.                                                   |
+| `createdAt`   | string   | `YYYY-MM-DD`.                                                            |
+| `meta`        | object   | `createdAt`, `isDemo`.                                                   |
+
+`trainings.categoryId` es un FK opcional a esta colección; `null` significa "Sin categoría".
+
+**Al borrar una categoría** se archiva (`status: 'archived'`) y se pone `categoryId: null` en los
+entrenamientos que la referencian. **Nunca se borra un entrenamiento por reagrupar**: todos caen al
+grupo "Sin categoría", que sigue siendo visible y editable.
+
+Un `categoryId` que apunta a una categoría ya borrada a mano (editando el JSON) no rompe nada: la
+agrupación lo trata como `null` en vez de dejar el entrenamiento invisible.
+
 ### `trainings` — Entrenamientos (plantillas)
 
 Plantillas **globales**. No tienen `studentId`: la misma la usan todos los alumnos que quieran.
@@ -179,6 +214,7 @@ Plantillas **globales**. No tienen `studentId`: la misma la usan todos los alumn
 |---------------|----------|-------------------------------------------------------------------|
 | `id`          | string   | `trn_xxxxxx`.                                                    |
 | `name`        | string   | Nombre del entrenamiento.                                         |
+| `categoryId`  | string?  | FK → `trainingCategories.id`. `null` = Sin categoría.             |
 | `objective`   | string   | Objetivo (Hipertrofia, Resistencia, Potencia…).                  |
 | `observation` | string   | Indicaciones generales para la sesión.                           |
 | `exerciseIds` | string[] | FKs → `exercises.id`. **El índice del array es el orden.**        |
@@ -188,6 +224,10 @@ Plantillas **globales**. No tienen `studentId`: la misma la usan todos los alumn
 
 > No hay campo `order` para los ejercicios: el orden es la posición en `exerciseIds`. Agregar al
 > final, mover con los botones ↑ ↓.
+
+`listTrainings({ categoryId })` filtra por categoría. Ojo con el sentinel: **`categoryId: null` es un
+filtro real** ("Sin categoría"), por eso la función sólo omite el filtro cuando la clave no viene
+en el objeto de opciones.
 
 **Al borrar un entrenamiento** se pone `trainingId: null` en las asistencias que lo referencian y
 se conservan sus `entries`. El historial no se pierde; sólo el título del entrenamiento pasa a

@@ -15,7 +15,9 @@ const { createPayment, markPaid, listPayments, totalReceivedInMonth } = await im
 const { computeStudentMetrics, determineLevel, progressToNext, earnedBadges } = await import('../assets/js/services/levels.js');
 const { buildSeed } = await import('../assets/js/services/seed.js');
 const { createExercise, findExercise, deleteExercise } = await import('../assets/js/services/exercises.js');
-const { createTraining, findTraining, exercisesOf, deleteTraining } = await import('../assets/js/services/trainings.js');
+const { createTraining, findTraining, exercisesOf, deleteTraining, listTrainings, updateTraining } = await import('../assets/js/services/trainings.js');
+const { createCategory, findCategory, listCategories, updateCategory, deleteCategory, groupTrainingsByCategory } =
+  await import('../assets/js/services/categories.js');
 const { saveAttendance, findAttendance, findAttendanceOn, draftForAttendance, attendancesWithEntries } =
   await import('../assets/js/services/attendance.js');
 
@@ -137,5 +139,76 @@ eq(findAttendance(a1.attendance.id).entries[1].name, 'Press banca',
 deleteTraining(trn.id);
 eq(findAttendance(a2.attendance.id).trainingId, null, 'deleteTraining nullifies trainingId on past attendances');
 eq(findAttendance(a2.attendance.id).entries.length, 2, 'deleteTraining leaves the executed entries intact');
+
+/* 7) Categorías: CRUD ---------------------------------------- */
+console.log('\n--- categorías ---');
+
+const catSuperior = createCategory({ name: 'Tren superior', observation: 'Empuje y tirón', color: 'accent' });
+const catInferior = createCategory({ name: 'Tren inferior', color: 'info' });
+eq(listCategories().length, 2, 'createCategory adds to the collection');
+eq(findCategory(catSuperior.id).name, 'Tren superior', 'findCategory resolves by id');
+eq(findCategory(catSuperior.id).color, 'accent', 'category keeps its badge tone');
+eq(createCategory({ name: '  Con espacios  ', color: 'inventado' }).color, 'accent',
+  'unknown tone falls back to the first BADGE_TONE');
+eq(listCategories().some((c) => c.name === 'Con espacios'), true, 'category name is trimmed');
+
+// Two trainings, one in each category, one with none at all.
+const tSup = createTraining({ name: 'Superior A', categoryId: catSuperior.id, exerciseIds: [bench.id] });
+const tInf = createTraining({ name: 'Inferior A', categoryId: catInferior.id, exerciseIds: [squat.id] });
+const tLibre = createTraining({ name: 'Sin categoría', exerciseIds: [squat.id] });
+eq(findTraining(tSup.id).categoryId, catSuperior.id, 'createTraining persists categoryId');
+eq(findTraining(tLibre.id).categoryId, null, 'a training without category stores null, not undefined');
+
+eq(listTrainings({ categoryId: catSuperior.id }).length, 1, 'listTrainings filters by categoryId');
+eq(listTrainings({ categoryId: catInferior.id })[0].id, tInf.id, 'the filter returns the right training');
+eq(listTrainings({ categoryId: null }).length, 1, 'categoryId:null is a real filter ("Sin categoría")');
+eq(listTrainings({ categoryId: null })[0].id, tLibre.id, '"Sin categoría" returns the uncategorised one');
+eq(listTrainings().length, 3, 'omitting categoryId does not filter at all');
+
+updateTraining(tSup.id, { name: 'Superior A' });
+eq(findTraining(tSup.id).categoryId, catSuperior.id, 'updateTraining without categoryId keeps the old one');
+updateTraining(tSup.id, { categoryId: null });
+eq(findTraining(tSup.id).categoryId, null, 'updateTraining can detach a training to "Sin categoría"');
+updateTraining(tSup.id, { categoryId: catSuperior.id });
+
+updateCategory(catSuperior.id, { name: 'Superior' });
+eq(findCategory(catSuperior.id).name, 'Superior', 'updateCategory renames');
+
+/* 8) Agrupación para la vista de entrenamientos --------------- */
+// `catSuperior` was renamed to "Superior" above, which sorts before "Tren inferior".
+const groups = groupTrainingsByCategory(listTrainings(), listCategories());
+eq(groups.length, 3, 'groupTrainingsByCategory makes one bucket per used category plus the uncategorised one');
+eq(groups[0].category.name, 'Superior', 'named groups sort alphabetically');
+eq(groups[1].category.name, 'Tren inferior', 'named groups sort alphabetically (2nd)');
+eq(groups[2].category, null, 'the uncategorised bucket is always last');
+eq(groups[2].trainings.map((t) => t.id).includes(tLibre.id), true,
+  'an uncategorised training stays reachable instead of vanishing');
+eq(groups[0].trainings.length, 1, 'each bucket only holds its own trainings');
+
+// A training pointing at a deleted category must fall into the safe bucket.
+updateTraining(tInf.id, { categoryId: 'cat_inexistente' });
+const dangling = groupTrainingsByCategory(listTrainings(), listCategories());
+eq(dangling[dangling.length - 1].trainings.map((t) => t.id).includes(tInf.id), true,
+  'a dangling categoryId falls back to "Sin categoría" rather than disappearing');
+updateTraining(tInf.id, { categoryId: catInferior.id });
+
+/* 9) Borrar una categoría NO borra entrenamientos -------------- */
+deleteCategory(catInferior.id);
+eq(findCategory(catInferior.id)?.status, 'archived', 'deleteCategory soft-archives');
+eq(listCategories().some((c) => c.id === catInferior.id), false, 'archived categories leave the active list');
+eq(findCategory(catInferior.id)?.name, 'Tren inferior', 'the archived record is still on disk');
+eq(findTraining(tInf.id).categoryId, null, 'trainings are detached to "Sin categoría"');
+eq(findTraining(tInf.id).name, 'Inferior A', 'regrouping never deletes a training');
+eq(listTrainings().length, 3, 'all trainings survive the category deletion');
+
+/* 10) Los datos demo traen la capa de categorías --------------- */
+eq(seed.trainingCategories.length, 3, 'demo seeds 3 categories');
+const seedCatIds = new Set(seed.trainingCategories.map((c) => c.id));
+eq(seed.trainings.filter((t) => t.categoryId && seedCatIds.has(t.categoryId)).length, 3,
+  'demo trainings point at real category ids');
+eq(seed.trainings.some((t) => t.categoryId === null), true,
+  'demo keeps one uncategorised training so the "Sin categoría" bucket is visible');
+eq(groupTrainingsByCategory(seed.trainings, seed.trainingCategories).length, 4,
+  'the demo groups into 3 named buckets + "Sin categoría"');
 
 console.log(`\n${failed === 0 ? 'ALL OK' : 'FAILURES'}: ${passed} passed, ${failed} failed.`);

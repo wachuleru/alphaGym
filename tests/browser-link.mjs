@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 const views = [
   'assets/js/views/dashboard.js',
   'assets/js/views/attendance.js',
+  'assets/js/views/attendance-form.js',
   'assets/js/views/workouts.js',
   'assets/js/views/students.js',
   'assets/js/views/student-detail.js',
@@ -18,6 +19,7 @@ const views = [
   'assets/js/services/students.js',
   'assets/js/services/attendance.js',
   'assets/js/services/exercises.js',
+  'assets/js/services/categories.js',
   'assets/js/services/trainings.js',
   'assets/js/services/entries.js',
   'assets/js/services/levels.js',

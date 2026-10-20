@@ -78,12 +78,18 @@ Desde **Datos y configuración → Excel → Exportar** puedes descargar:
 - `Asistencias` → `gymtrack_asistencias_<fecha>.xlsx`
 - `Mediciones` → `gymtrack_mediciones_<fecha>.xlsx`
 - `Pagos` → `gymtrack_pagos_<fecha>.xlsx`
-- `Entrenamientos` → `gymtrack_entrenamientos_<fecha>.xlsx`, con 3 hojas:
+- `Entrenamientos` → `gymtrack_entrenamientos_<fecha>.xlsx`, con 4 hojas:
   - `Ejercicios` — el catálogo: nombre, grupos musculares, observación, estado.
-  - `Entrenamientos` — las plantillas y sus ejercicios, en orden.
-  - `Entrenamiento x Alumno` — una fila por ejercicio por sesión, con `Peso (kg)`,
-    `Peso anterior (kg)`, `Δ kg` y `Δ %`. Los deltas los calcula la **misma** función que usa la
-    interfaz, así que el Excel nunca contradice lo que se ve en pantalla.
+  - `Categorías` — la capa de agrupación: nombre, color, observación, estado y cuántos
+    entrenamientos tiene asignados.
+  - `Entrenamientos` — las plantillas y sus ejercicios, en orden, con la columna `Categoría`
+    (los que no tienen una salen como `Sin categoría`).
+  - `Entrenamiento x Alumno` — una fila por ejercicio por sesión, con `Categoría`,
+    `Peso (kg)`, `Peso anterior (kg)`, `Δ kg` y `Δ %`. Los deltas los calcula la **misma** función
+    que usa la interfaz, así que el Excel nunca contradice lo que se ve en pantalla.
+
+La columna `Categoría` de las dos últimas hojas es **texto resuelto a nombre**, no el `categoryId`:
+si borras una categoría en la app y recargas el archivo, la columna sigue siendo legible.
 
 ## Cómo se comporta la importación
 

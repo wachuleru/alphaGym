@@ -15,6 +15,7 @@
 import { $, todayISO } from '../utils.js';
 import { listStudents, fullName } from '../services/students.js';
 import { listTrainings, findTraining } from '../services/trainings.js';
+import { listCategories, findCategory, groupTrainingsByCategory } from '../services/categories.js';
 import { listExercises, findExercise } from '../services/exercises.js';
 import {
   saveAttendance,
@@ -22,7 +23,7 @@ import {
   draftForAttendance,
 } from '../services/attendance.js';
 import { draftEntryForExercise, weightDelta } from '../services/entries.js';
-import { MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE, IMPLEMENTS } from '../config.js';
+import { MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE, IMPLEMENTS, NO_CATEGORY_LABEL } from '../config.js';
 import { openModal, toast, toastError } from '../components.js';
 import { refreshIcons } from '../icons.js';
 
@@ -46,6 +47,14 @@ export function openAttendanceForm({ studentId = null, existing = null, onSaved 
     drafts: [],
   };
 
+  // Cascading picker: category first, then the training inside it. On edit we
+  // start pre-scoped to the category of the training already recorded, so the
+  // current value is visible in the list instead of hidden by the filter.
+  const categories = listCategories();
+  const existingTraining = existing?.trainingId ? findTraining(existing.trainingId) : null;
+  let categoryFilter = '';
+  if (existingTraining) categoryFilter = existingTraining.categoryId || '__none__';
+
   const tpl = document.createElement('div');
   tpl.innerHTML = `
     <div class="form-grid">
@@ -65,12 +74,17 @@ export function openAttendanceForm({ studentId = null, existing = null, onSaved 
           <option value="personalizada" ${state.type === 'personalizada' ? 'selected' : ''}>Personalizada</option>
           <option value="evaluación" ${state.type === 'evaluación' ? 'selected' : ''}>Evaluación</option>
         </select></div>
-      <div class="field col-12"><label class="field__label">Entrenamiento</label>
-        <select class="select" id="atTraining">
-          <option value="">— Sesión libre (sin plantilla) —</option>
-          ${listTrainings().map((t) =>
-            `<option value="${t.id}" ${state.trainingId === t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+      <div class="field col-6"><label class="field__label">Categoría</label>
+        <select class="select" id="atCategory">
+          <option value="">Todas las categorías</option>
+          ${categories.map((c) =>
+            `<option value="${c.id}" ${categoryFilter === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+          <option value="__none__" ${categoryFilter === '__none__' ? 'selected' : ''}>Sin categoría</option>
         </select>
+        <p class="field__hint">Elige una categoría para acotar la lista de entrenamientos.</p>
+      </div>
+      <div class="field col-6"><label class="field__label">Entrenamiento</label>
+        <select class="select" id="atTraining"></select>
         <p class="field__hint" id="atTrainingHint"></p>
       </div>
       <div class="field col-12"><label class="field__label">Observaciones</label>
@@ -140,6 +154,26 @@ export function openAttendanceForm({ studentId = null, existing = null, onSaved 
     state.dateISO = e.target.value || todayISO();
     reloadDrafts();
   });
+  $('#atCategory').addEventListener('change', (e) => {
+    categoryFilter = e.target.value || '';
+    renderTrainingOptions();
+    // A training that no longer belongs to the visible bucket is dropped, so
+    // the form never keeps a selection the user cannot see or undo.
+    const stillVisible = state.trainingId && $('#atTraining').querySelector(`option[value="${state.trainingId}"]`);
+    if (state.trainingId && !stillVisible) {
+      state.trainingId = null;
+      $('#atTraining').value = '';
+      toast({
+        type: 'info',
+        title: 'Entrenamiento soltado',
+        message: `Ya no está en la categoría elegida, así que la sesión quedó como "Sesión libre".`,
+        timeout: 3500,
+      });
+      reloadDrafts();
+    } else {
+      renderTrainingHint();
+    }
+  });
   $('#atTraining').addEventListener('change', (e) => {
     const newId = e.target.value || null;
     if (state.trainingId !== newId) {
@@ -165,6 +199,33 @@ export function openAttendanceForm({ studentId = null, existing = null, onSaved 
 
   /* ---------- Seed + render ---------- */
 
+  /** Rebuild the training <select> for the current category.
+   *  With "Todas" the options are grouped in <optgroup> per category, which is
+   *  the same grouping the workouts view uses; with a single category picked,
+   *  the list is just that bucket. */
+  function renderTrainingOptions() {
+    const sel = $('#atTraining');
+    if (!sel) return;
+    const all = listTrainings();
+    const filtered = categoryFilter === ''
+      ? all
+      : all.filter((t) => (t.categoryId || null) === (categoryFilter === '__none__' ? null : categoryFilter));
+
+    const free = `<option value="">— Sesión libre (sin plantilla) —</option>`;
+    if (categoryFilter === '') {
+      const groups = groupTrainingsByCategory(filtered, listCategories());
+      sel.innerHTML = free + groups.map((g) => `
+        <optgroup label="${escapeHtml(g.category ? g.category.name : NO_CATEGORY_LABEL)}">
+          ${g.trainings.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('')}
+        </optgroup>`).join('');
+    } else {
+      sel.innerHTML = free + filtered.map((t) =>
+        `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+    }
+    sel.value = state.trainingId || '';
+    if (sel.value !== (state.trainingId || '')) sel.value = '';
+  }
+
   /** Show the training's own guidance under the picker, so the trainer
    *  sees "calentamiento 10 min" without opening the workouts view. */
   function renderTrainingHint() {
@@ -173,6 +234,8 @@ export function openAttendanceForm({ studentId = null, existing = null, onSaved 
     const t = state.trainingId ? findTraining(state.trainingId) : null;
     if (!t) { hint.textContent = ''; return; }
     const bits = [];
+    const cat = t.categoryId ? findCategory(t.categoryId) : null;
+    bits.push(cat ? cat.name : NO_CATEGORY_LABEL);
     if (t.objective) bits.push(t.objective);
     if (t.observation) bits.push(t.observation);
     hint.textContent = bits.join(' · ');
@@ -197,8 +260,9 @@ export function openAttendanceForm({ studentId = null, existing = null, onSaved 
     refreshAddSelect();
   }
 
+  renderTrainingOptions();
   if (state.studentId && state.dateISO) reloadDrafts();
-  else { renderTrainingHint(); renderEntries(); }
+  else { renderTrainingHint(); renderEntries(); refreshAddSelect(); }
 
   function refreshAddSelect() {
     const present = new Set(state.drafts.map((d) => d.exerciseId));

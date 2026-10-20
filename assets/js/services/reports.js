@@ -4,13 +4,14 @@
    =========================================================== */
 
 import { fmtDate, fmtCLP, fromISODate } from '../utils.js';
-import { LEVELS, MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE } from '../config.js';
+import { LEVELS, MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE, NO_CATEGORY_LABEL } from '../config.js';
 import { computeStudentMetrics, determineLevel, progressToNext, earnedBadges } from './levels.js';
 import { fullName } from './students.js';
 import { listAttendances } from './attendance.js';
 import { listMeasurements, MEASURE_FIELDS, getMeasureLabel, getMeasureUnit } from './measurements.js';
 import { forStudent as paymentsForStudent } from './payments.js';
 import { listTrainings, findTraining } from './trainings.js';
+import { findCategory, listCategories } from './categories.js';
 import { forStudent as goalsForStudent } from './goals.js';
 import { forStudent as notesForStudent } from './notes.js';
 import { weightDelta } from './entries.js';
@@ -55,6 +56,7 @@ export function buildReportContext(student, opts) {
     measurements: listMeasurements().filter((m) => m.studentId === student.id),
     payments: paymentsForStudent(student.id),
     trainings: listTrainings(),
+    categories: listCategories(),
     workoutSessions,
     goals: goalsForStudent(student.id),
     notes: notesForStudent(student.id).filter((n) => n.shared),
@@ -231,8 +233,10 @@ export function renderReport(ctx, gymName = 'GymTrack') {
             allAtt.sort((x, y) => `${y.dateISO}${y.timeISO || ''}`.localeCompare(`${x.dateISO}${x.timeISO || ''}`));
             const priorMap = new Map();
             for (const x of allAtt) for (const e of x.entries) if (!priorMap.has(e.exerciseId)) priorMap.set(e.exerciseId, e);
+            const cat = t?.categoryId ? findCategory(t.categoryId) : null;
+            const catTag = t ? (cat ? cat.name : NO_CATEGORY_LABEL) : '';
             return `
-              <h3 style="margin:0 0 6px">${e(title)} — ${fmtDate(a.dateISO)}</h3>
+              <h3 style="margin:0 0 6px">${e(title)} — ${fmtDate(a.dateISO)}${catTag ? ` <small style="color:#64748b;font-weight:400">(${e(catTag)})</small>` : ''}</h3>
               <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:8px">
                 <thead><tr style="background:#f1f5f9"><th align="left" style="padding:6px">Ejercicio</th><th align="left" style="padding:6px">Grupo</th><th align="left" style="padding:6px">Series×Reps</th><th align="left" style="padding:6px">Peso</th><th align="left" style="padding:6px">Δ vs anterior</th><th align="left" style="padding:6px">Obs.</th></tr></thead>
                 <tbody>

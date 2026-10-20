@@ -6,7 +6,7 @@ export const SCHEMA_VERSION = 2;
 export const STORAGE_KEY = `gymtrack:db:v${SCHEMA_VERSION}`;
 export const LEGACY_STORAGE_KEY = 'gymtrack:db:v1';
 export const ARCHIVE_KEY = 'gymtrack:archive:v1';
-export const APP_VERSION = '2.0.0';
+export const APP_VERSION = '2.1.0';
 export const APP_NAME = 'GymTrack';
 
 /**
@@ -161,6 +161,16 @@ export const IMPLEMENTS = [
 export const IMPLEMENT_BY_VALUE = Object.fromEntries(
   IMPLEMENTS.map((i) => [i.value, i])
 );
+
+/**
+ * Tonos de badge disponibles. Es la lista de la que beben tanto los grupos
+ * musculares como las categorías de entrenamiento, para que ninguna entidad
+ * invente clases CSS nuevas.
+ */
+export const BADGE_TONES = ['accent', 'info', 'success', 'warning', 'muted'];
+
+/** Un entrenamiento sin categoría se agrupa bajo esta etiqueta. */
+export const NO_CATEGORY_LABEL = 'Sin categoría';
 
 /* Chart palette helper */
 export const chartPalette = () => {

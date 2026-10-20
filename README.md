@@ -7,6 +7,7 @@ Plataforma de administración y seguimiento para gimnasios. Permite registrar al
 - 👥 Gestión completa de alumnos con perfil, objetivos y notas
 - 📅 Registro de asistencia **con la ejecución de la sesión** (series, reps, peso, implemento)
 - 🏋️ Catálogo reutilizable de ejercicios + plantillas de entrenamiento compartibles entre alumnos
+- 🗂️ Categorías de entrenamiento gestionables, con filtro y agrupación en la lista y selector en el registro de asistencia
 - 🔁 Precarga desde el historial: al registrar una sesión, los pesos se autocompletan con lo último que hizo ese alumno
 - 📈 Delta de peso en vivo (`+5 kg · +8%`) junto al campo de peso
 - ✏️ Ejercicios añadidos o quitados **sólo para esa asistencia**, sin tocar la plantilla
@@ -58,6 +59,7 @@ Sin frameworks. Sin backend. Sin build step.
         ├── app.js            Punto de entrada
         ├── services/
         │   ├── exercises.js     Catálogo de ejercicios
+        │   ├── categories.js    Categorías de entrenamiento (agrupación)
         │   ├── trainings.js     Plantillas de entrenamiento
         │   ├── entries.js       Precarga y delta de peso (lógica pura)
         │   └── …                students, attendance, payments, levels, …
@@ -68,22 +70,27 @@ Sin frameworks. Sin backend. Sin build step.
 
 ### Modelo de datos (esquema v2)
 
-Tres conceptos separados que se unen al registrar una asistencia:
+Tres conceptos separados que se unen al registrar una asistencia, más una capa de agrupación
+por encima de las plantillas:
 
 ```
-exercises   → catálogo reutilizable  { id, name, observation, muscleGroups[] }
-trainings   → plantillas globales   { id, name, observation, exerciseIds[] }  (sin studentId)
-attendances → la sesión realizada   { id, studentId, trainingId, dateISO, entries[] }
+trainingCategories → agrupación     { id, name, observation, color, status }  (opcional)
+exercises          → catálogo        { id, name, observation, muscleGroups[] }
+trainings          → plantillas      { id, name, categoryId, observation, exerciseIds[] }  (sin studentId)
+attendances        → la sesión       { id, studentId, trainingId, dateISO, entries[] }
               └─ entries[] = { exerciseId, order, extra, name, muscleGroups[],
                                sets, reps, weightKg, implement, observation,
                                lastWeightKg }
 ```
 
+- Una **categoría no es un plan**: sólo agrupa y filtra los entrenamientos ("Tren superior",
+  "Full body", "Cardio"). No lleva ejercicios, semanas ni progresión.
 - Un **entrenamiento no pertenece a un alumno**: la misma plantilla la usan todos.
 - Cada **entrada** guarda un snapshot de nombre y grupos musculares, así que el historial
   sobrevive aunque el ejercicio se renombre o se borre del catálogo.
 - `lastWeightKg` es la línea base del delta y se **recalcula cada vez que se guarda**,
   no queda congelada al crear (así registrar una sesión con fecha retroactiva no miente).
+- Borrar una **categoría nunca borra entrenamientos**: quedan como "Sin categoría".
 
 Ver [docs/data-model.md](docs/data-model.md) para el detalle completo.
 
@@ -133,6 +140,12 @@ y la v2 empieza vacía. Desde **Datos y configuración** aparece un bloque
 | **Eliminar archivo** | Borra el archivo. Irreversible. |
 
 Los respaldos v1 no se pueden importar en la v2: el modelo es incompatible, no un formato.
+
+### Desde la 2.0 (2.1)
+
+La 2.1 agrega las **categorías de entrenamiento**. Es un cambio **aditivo**: `SCHEMA_VERSION` sigue
+en 2 porque las bases existentes se rellenan solas con `trainingCategories: []`. Tus entrenamientos
+actuales aparecen bajo **Sin categoría** hasta que les asignes una. No hay nada que migrar a mano.
 
 ## Documentación adicional
 

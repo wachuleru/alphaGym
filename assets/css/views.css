@@ -336,6 +336,28 @@
   white-space: nowrap;
 }
 
+/* ---------- v2.1: categorías de entrenamiento ----------
+   Agrupan la lista de entrenamientos en bloques. El encabezado lleva el badge
+   de la categoría y el conteo; los trainings sin categoría caen en el bloque
+   final, con tono apagado. */
+.category-group { display: flex; flex-direction: column; gap: var(--sp-3); }
+.category-group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.category-group__count {
+  font-size: var(--fs-xs);
+  color: var(--c-text-subtle);
+  font-weight: 600;
+}
+.category-group__obs {
+  width: 100%;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
 /* ---------- Reports ---------- */
 .report-builder {
   display: grid;
