@@ -372,7 +372,36 @@ Reglas importantes:
 - Las semanas futuras nunca cuentan como incumplidas.
 - Solo se otorgan niveles cuando **todos** los umbrales del nivel se cumplen.
 - La medición física (peso, medidas) **nunca** afecta el nivel.
-- Las rachas comienzan a contarse desde la semana más reciente con asistencia, retrocediendo mientras la semana haya cumplido la meta.
+- **Nada de esto se guarda.** `computeStudentMetrics()` recalcula todo desde `attendances[]` en cada
+  render: corregir una asistencia o registrar una con fecha retroactiva cambia los números al
+  instante y no existe ningún campo que pueda quedar desincronizado.
+- Una semana cuenta como cumplida si tiene al menos `weeklyGoal` **días con sesión**.
+- Todas las conversión de fecha pasan por `fromISODate()` (hora local). Nada usa
+  `new Date('YYYY-MM-DD')`, que parsea como medianoche UTC y desplaza el cálculo una semana hacia
+  atrás en todo el hemisferio oeste.
+
+### Rachas (`streakWeeks`)
+
+Se cuentan hacia atrás desde la **semana actual**:
+
+1. Si la semana en curso ya cumplió la meta, cuenta y se sigue hacia atrás.
+2. Si todavía no la cumplió, **no cuenta como fallo**: está abierta, acaba de empezar. Se retrocede
+   una semana sin cobrarla.
+3. Desde ahí, cada semana anterior que cumplió la meta suma una, hasta el comienzo del historial.
+
+La diferencia entre (2) y (3) es lo que hace que esto sea una racha: perdonar la semana que está en
+curso es justice, perdonar un hueco de hace un mes es mentira.
+
+### Cumplimiento semanal (`weeklyCompliance`)
+
+Ventana de **12 semanas calendario hacia atrás desde la semana actual**. Una semana sin asistencias
+cuenta como incumplimiento — no se salta. Así, un alumno que abandona deja de arrastrar su mejor
+historial para siempre.
+
+La ventana **no retrocede antes de que el alumno estuviera en el gimnasio**, y ese tope es **el más
+temprano entre `joinedAt` y su primera asistencia registrada**. Cubre los dos casos: un alumno que se
+inscribe hoy no es sancionado por las semanas anteriores, y una ficha creada hoy pero con historial
+retroactivo sí se juzga sobre ese historial.
 
 ## Insignias (badges)
 

@@ -1,5 +1,31 @@
 # GymTrack — Resumen de entrega
 
+## 0.bis. Corrección en 2.1.1 — las rachas
+
+Las rachas se calculaban, no se guardan (`computeStudentMetrics()` deriva todo de `attendances[]` en
+cada render). El algoritmo estaba mal por partida triple:
+
+| Bug | Síntoma | Causa |
+|---|---|---|
+| **Zona horaria** | La racha salía una semana corta, o en 0 | `new Date('2026-03-02')` parsea como **medianoche UTC**, pero `startOfWeek()` lo lee en hora **local**. En Chile (UTC−3) el lunes se convertía en domingo → `startOfWeek` retrocedía otra semana → clave ausente en `weekMap` → cuenta 0 → racha cortada. En UTC pasaba; en todo el hemisferio negativo fallaba. |
+| **Racha muerta** | Un alumno que abandonó conservaba su racha para siempre | El bucle arrancaba en la última semana **con asistencia**, no en la actual. Perdonaba todos los huecos, no sólo la semana en curso. |
+| **Cumplimiento inflado** | Quien abandonaba sacaba 100% | La ventana se armaba sobre las últimas 12 semanas **que tenían asistencia**, no las últimas 12 semanas. |
+
+Los tres contradecían el comportamiento que el propio código documentaba. Ahora:
+
+- La racha se ancla en la **semana actual** y camina hacia atrás. La semana en curso está **abierta**
+  (no cumplirla todavía no cuesta nada), pero cualquier semana vacía anterior sí la rompe.
+- El cumplimiento usa una ventana de **12 semanas calendario**, con las vacías contando como fallo, y
+  nunca retrocede antes de que el alumno estuviera en el gimnasio. Ese tope es **el más temprano entre
+  `joinedAt` y su primera asistencia**: una ficha creada hoy con seis semanas de historial
+  retroactivo se juzga sobre esas seis semanas, no sobre una.
+- Todas las conversiones de fecha pasan por `fromISODate()` (hora local). Nada vuelve a usar
+  `new Date()` con una cadena `YYYY-MM-DD`.
+
+**Consecuencia visible:** al contar las semanas vacías, **el cumplimiento baja y algunos alumnos
+bajan de nivel**. No es una regresión: es el número que antes estaba inflado. Los umbrales de
+`LEVELS` no se tocaron.
+
 ## 0. Novedades en 2.1.0 (categorías de entrenamiento)
 
 La 2.1 agrega una **capa de agrupación** encima de los entrenamientos, a pedido explícito: *"igual
@@ -266,7 +292,7 @@ Resultado: **ALL OK: 20 passed, 0 failed.**
 - Pago → marcar como pagado → consulta de `totalReceivedInMonth`.
 - Generación de datos demo: **14 alumnos**.
 
-Y **61 asserts** de esquema v2 (los últimos 32 son de categorías):
+Y **74 asserts** de esquema v2 (32 de categorías, 13 de rachas):
 - Round-trip de entradas (snapshots de nombre/grupos, `extra`, `order`).
 - Dupe del mismo día → edita el registro existente, no crea otro.
 - `lastWeightKg` se **recalcula al guardar** (backdating) y es idempotente.
@@ -281,7 +307,17 @@ Y **61 asserts** de esquema v2 (los últimos 32 son de categorías):
 - `deleteCategory` archiva, **no borra ningún entrenamiento**, y los desasigna a `null`.
 - El seed demo trae 3 categorías, 3 entrenamientos con categoría válida y 1 sin categoría.
 
-Resultado: **ALL OK: 61 passed, 0 failed.**
+**Rachas (13 asserts)**, todos los fixtures anclados a la semana en curso para que no dependan de la
+fecha en que se ejecute:
+- 5 semanas seguidas cerradas → 5. Una semana cumplida hoy → cuenta. Semana actual vacía → no rompe.
+- **Racha abandonada hace 4+ semanas → 0** (antes salía 5).
+- Hueco en medio → rompe y descarta todo lo anterior.
+- Una sesión por semana contra meta 2 → 0. Dos contra meta 3 → 0.
+- Guarda de zona horaria: una sesión de esta semana lee 1 sea cual sea el offset del host.
+- Cumplimiento: 3 semanas de 12 → 25% (antes 100%); 0 asistencias → 0%; la ventana arranca en la
+  inscripción.
+
+Resultado: **ALL OK: 74 passed, 0 failed.**
 
 ### Integridad de módulos
 - `tests/browser-link.mjs` → **30/30 módulos importables** (todos los archivos JS del navegador).
@@ -306,6 +342,9 @@ Resultado: **ALL OK: 61 passed, 0 failed.**
 | "Entrenamiento eliminado" también para sesiones libres | Etiqueta incorrecta cuando nunca hubo plantilla |
 | `listTrainings({categoryId})` no distinguía `null` de "sin filtro" | El filtro "Sin categoría" devolvía la lista completa |
 | Selector de categoría dejaba un entrenamiento invisible | Se seleccionaba un entrenamiento fuera del filtro y quedaba colgado; ahora cae a "Sesión libre" con aviso |
+| Racha calculada con `new Date(isoString)` (UTC) mezclado con lecturas locales | Racha una semana corta o en 0 en Chile y el resto del hemisferio oeste; en UTC pasaba |
+| Racha anclada en la última asistencia, no en la semana actual | Un alumno que dejaba de venir conservaba su racha indefinidamente |
+| Cumplimiento semanal sobre las últimas 12 semanas *con asistencia* | Alumno abandonado con 100% de cumplimiento y, por tanto, nivel inflado |
 
 ### Backup/Restore (Node + localStorage shim)
 `tests/backup.mjs` ejecuta:

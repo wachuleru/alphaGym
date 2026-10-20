@@ -5,16 +5,34 @@
    =========================================================== */
 
 import { LEVELS, BADGES, DEFAULT_WEEKLY_GOAL } from '../config.js';
-import { startOfWeek, toISODate, addDays, diffDays } from '../utils.js';
+import { startOfWeek, toISODate, addDays, todayISO, fromISODate } from '../utils.js';
+
+/** How many calendar weeks the weekly-compliance window spans. */
+const COMPLIANCE_WINDOW = 12;
+
+/**
+ * The Monday of the week before a `YYYY-MM-DD` Monday, as `YYYY-MM-DD`.
+ * Pure string→string: every step goes through `fromISODate` (local), never
+ * `new Date(str)` (UTC). Mixing the two is what made streaks read one week short
+ * in Chile, and it can silently return a key that isn't in `weekMap` at all.
+ */
+function weekKeyBefore(mondayISO) {
+  return toISODate(addDays(fromISODate(mondayISO), -7));
+}
 
 /**
  * Compute all metrics for a single student given their attendances.
+ * Nothing here is persisted: every number is derived from `attendances` on each
+ * render, so a corrected or backdated attendance is reflected immediately.
+ *
  * Returns:
  *   totalAttendances
- *   weekStats[]         (one entry per ISO week containing >=1 attendance, sorted oldest -> newest)
- *   streakWeeks         (number of consecutive completed weeks ending in the current or last completed week)
- *   weeklyCompliance    (share of recent weeks meeting goal, computed over the
- *                        last 12 weeks; never below 0)
+ *   weekKeys/weekMap   (weeks that contain >=1 attendance, ascending; consumed by the UI strip)
+ *   streakWeeks        consecutive weeks meeting the goal, counting back from the current
+ *                      week. The current week is OPEN: not meeting it yet costs nothing,
+ *                      but any *earlier* empty week breaks the streak.
+ *   weeklyCompliance   share of the last 12 calendar weeks meeting the goal, counting empty
+ *                      weeks as failures and never reaching back past the enrollment date
  *   weeklyGoal          (echo of the student's goal)
  *   firstAttendanceISO  (or null)
  *   lastAttendanceISO   (or null)
@@ -41,30 +59,58 @@ export function computeStudentMetrics(student, attendances, measurements = [], g
   }
   const weekKeys = [...weekMap.keys()].sort(); // ascending ISO, sorts chronologically
 
-  // streak: count consecutive weeks meeting goal, walking backward from the
-  // most recent week containing at least one attendance. If the current week
-  // has no attendance yet, we don't penalise (open week).
+  // The Monday of the current week. `todayISO()` gives a local YYYY-MM-DD and
+  // `fromISODate` parses it as local midnight — do NOT feed these keys to
+  // `new Date()`, which parses them as UTC and lands on the previous day in
+  // every negative-offset timezone (Chile included).
+  const currentWeekKey = toISODate(startOfWeek(todayISO()));
+
+  // streak: walk backward from the CURRENT week, not from the last attended one.
+  // Anchoring on the last attendance let a streak survive forever — a student who
+  // stopped showing up kept the racha they had earned weeks ago.
   let streak = 0;
-  if (weekKeys.length) {
-    let cursor = new Date(weekKeys[weekKeys.length - 1]);
-    cursor = startOfWeek(cursor);
-    // We iterate backward, week by week, while the prior week met the goal.
-    // We stop when we hit a week that didn't meet it.
-    while (true) {
-      const key = toISODate(cursor);
-      const count = weekMap.get(key) || 0;
-      if (count >= goal) streak++;
-      else break;
-      cursor = addDays(cursor, -7);
-      // Safety: don't go beyond the first known week
-      if (toISODate(cursor) < weekKeys[0]) break;
-    }
+  let cursorKey = currentWeekKey;
+  // The current week is still in progress: not having met the goal yet is not a
+  // failure, so step back one week without charging a miss. Every earlier empty
+  // week, on the other hand, does break it — that's the whole point of a streak.
+  if ((weekMap.get(cursorKey) || 0) < goal) {
+    cursorKey = weekKeyBefore(cursorKey);
+  }
+  // `weekMap.has` is both the "met the goal" test and the "don't wander past the
+  // student's history" guard: a gap in the map ends the streak, and so does the
+  // start of their record.
+  while (weekMap.has(cursorKey)) {
+    if ((weekMap.get(cursorKey) || 0) < goal) break;
+    streak++;
+    cursorKey = weekKeyBefore(cursorKey);
   }
 
-  // weekly compliance — completed weeks only (last 12)
-  const completedWeeks = weekKeys.slice(-12);
-  const compliantWeeks = completedWeeks.filter((k) => (weekMap.get(k) || 0) >= goal).length;
-  const weeklyCompliance = completedWeeks.length ? compliantWeeks / completedWeeks.length : 0;
+  // weekly compliance — the last N calendar weeks, NOT the last N weeks that
+  // happen to contain an attendance. Skipping empty weeks scored a student who
+  // walked away at 100%, which in turn inflated their level.
+  //
+  // The window never reaches back before the student was in the gym. That's the
+  // EARLIER of `joinedAt` and their first recorded attendance: a record created
+  // today but backfilled with six weeks of history has to be judged on those six
+  // weeks, otherwise the window collapses to this single week and compliance
+  // becomes a coin flip.
+  const enrolledWeek = student?.joinedAt || student?.membershipStart
+    ? toISODate(startOfWeek(student.joinedAt || student.membershipStart))
+    : null;
+  const firstAttWeek = allDates[0] ? toISODate(startOfWeek(allDates[0])) : null;
+  const firstJudgedWeek = enrolledWeek && firstAttWeek
+    ? (enrolledWeek < firstAttWeek ? enrolledWeek : firstAttWeek)
+    : (enrolledWeek || firstAttWeek);
+  const window = [];
+  let wKey = currentWeekKey;
+  for (let i = 0; i < COMPLIANCE_WINDOW; i++) {
+    // Never judge a student on weeks before they enrolled.
+    if (firstJudgedWeek && wKey < firstJudgedWeek) break;
+    window.push(wKey);
+    wKey = weekKeyBefore(wKey);
+  }
+  const compliantWeeks = window.filter((k) => (weekMap.get(k) || 0) >= goal).length;
+  const weeklyCompliance = window.length ? compliantWeeks / window.length : 0;
 
   // measurement count + goal flag
   const measurementCount = measurements.filter((m) => m.studentId === student.id).length;

@@ -20,6 +20,7 @@ const { createCategory, findCategory, listCategories, updateCategory, deleteCate
   await import('../assets/js/services/categories.js');
 const { saveAttendance, findAttendance, findAttendanceOn, draftForAttendance, attendancesWithEntries } =
   await import('../assets/js/services/attendance.js');
+const { todayISO, toISODate, fromISODate, startOfWeek, addDays } = await import('../assets/js/utils.js');
 
 /* ---------- Tiny assertion harness ---------- */
 let passed = 0, failed = 0;
@@ -210,5 +211,55 @@ eq(seed.trainings.some((t) => t.categoryId === null), true,
   'demo keeps one uncategorised training so the "Sin categoría" bucket is visible');
 eq(groupTrainingsByCategory(seed.trainings, seed.trainingCategories).length, 4,
   'the demo groups into 3 named buckets + "Sin categoría"');
+
+/* 11) Rachas y cumplimiento semanal --------------------------- */
+console.log('\n--- rachas ---');
+
+// Every fixture below is anchored to the CURRENT week, never to a hardcoded
+// date. Three of these asserts fail on the old implementation:
+//  - anchoring the streak on the last attendance instead of the current week
+//  - letting a dead streak survive indefinitely
+//  - scoring compliance over only the weeks that happen to contain an attendance
+const THIS_MONDAY = toISODate(startOfWeek(todayISO()));
+const mondayOf = (weeksBack) => toISODate(addDays(fromISODate(THIS_MONDAY), -7 * weeksBack));
+/** Two sessions (Tue + Thu) inside the week `w` weeks back from this one. */
+const weekOf = (w) => [2, 4].map((day) => toISODate(addDays(fromISODate(mondayOf(w)), day)));
+const attOn = (isoList) => isoList.map((dateISO, i) => ({ id: `att${i}`, studentId: 'RX', dateISO }));
+
+const streakOf = (weeks, goal = 2) =>
+  computeStudentMetrics({ id: 'RX', weeklyGoal: goal }, weeks.flatMap(attOn)).streakWeeks;
+
+eq(streakOf([1, 2, 3, 4, 5].map(weekOf)), 5, '5 consecutive closed weeks → streak 5');
+eq(streakOf([1, 2, 3, 4, 0].map(weekOf)), 5, 'a week met today counts in the streak');
+eq(streakOf([1, 2, 3, 4].map(weekOf)), 4,
+  'the current week is OPEN: not meeting it yet costs nothing');
+eq(streakOf([5, 6, 7, 8, 9].map(weekOf)), 0,
+  'an abandoned streak dies: 5 good weeks 4+ weeks ago is 0, not 5');
+eq(streakOf([5, 4, 3, 1, 0].map(weekOf)), 2,
+  'a gap in the middle breaks the streak and everything before it');
+eq(streakOf([1, 2, 3].map(weekOf).map((d) => [d[0]])), 0,
+  'a single session a week never starts a streak against a goal of 2');
+eq(streakOf([1, 2, 3].map(weekOf), 3), 0,
+  'two sessions a week never starts a streak against a goal of 3');
+eq(streakOf([]), 0, 'a student with no attendances has no streak');
+
+// Timezone regression guard. The old cursor went through `new Date('YYYY-MM-DD')`,
+// which parses as UTC and lands on the previous day in every negative offset —
+// so in Chile the cursor pointed at a week that wasn't in the map and the streak
+// read one short (or zero). This asserts the cursor lands on the current week.
+eq(streakOf([weekOf(0)], 1), 1,
+  'a session earlier this week reads as streak 1 regardless of the host timezone');
+
+// Compliance: the window is calendar weeks, so empty ones count as failures.
+const complianceOf = (weeks, joinedAt) =>
+  computeStudentMetrics({ id: 'RX', weeklyGoal: 2, joinedAt }, weeks.flatMap(attOn)).weeklyCompliance;
+
+const twelveAgo = toISODate(addDays(fromISODate(THIS_MONDAY), -7 * 11));
+eq(complianceOf([1, 2, 3].map(weekOf), twelveAgo), 3 / 12,
+  '3 compliant weeks out of a 12-week window is 25%, not 100%');
+eq(complianceOf([1, 2, 3].map(weekOf), todayISO()), 3 / 4,
+  'the window starts at enrollment: a student in since this week is judged on 4 weeks');
+eq(complianceOf([0, 1, 2, 3, 4, 5].map(weekOf), twelveAgo), 6 / 12, '6 of 12 weeks compliant → 50%');
+eq(complianceOf([], todayISO()), 0, 'no attendances → 0% compliance, not 100%');
 
 console.log(`\n${failed === 0 ? 'ALL OK' : 'FAILURES'}: ${passed} passed, ${failed} failed.`);
