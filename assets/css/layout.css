@@ -1,0 +1,324 @@
+/* ===========================================================
+   GymTrack — Layout (sidebar + topbar + main)
+   =========================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--ff-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+  color: var(--c-text);
+  background: var(--c-bg);
+  background-image:
+    radial-gradient(1200px 600px at -10% -20%, rgba(244, 198, 98, 0.06), transparent 60%),
+    radial-gradient(900px 600px at 110% 110%, rgba(56, 189, 248, 0.05), transparent 60%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  min-height: 100dvh;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; }
+
+/* Focus styles */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  background: var(--c-accent);
+  color: var(--c-text-inverse);
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  z-index: 9999;
+  font-weight: 600;
+}
+.skip-link:focus { left: 8px; }
+
+/* ===========================================================
+   App shell grid
+   =========================================================== */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: 1fr;
+  grid-template-areas: "sidebar main";
+  min-height: 100dvh;
+}
+
+/* ===========================================================
+   Sidebar
+   =========================================================== */
+
+.sidebar {
+  grid-area: sidebar;
+  background: linear-gradient(180deg, var(--c-bg-deep) 0%, var(--c-bg) 100%);
+  border-right: 1px solid var(--c-border-soft);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  z-index: 50;
+}
+
+.sidebar__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3) var(--sp-6);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--c-text);
+  flex: 1;
+  min-width: 0;
+}
+
+.brand__mark {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  background: linear-gradient(135deg, var(--c-accent) 0%, var(--c-accent-deep) 100%);
+  color: var(--c-text-inverse);
+  box-shadow: var(--shadow-glow), var(--shadow-xs);
+  flex: 0 0 auto;
+}
+
+.brand__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
+}
+.brand__name {
+  font-family: var(--ff-display);
+  font-size: var(--fs-xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--c-text-strong);
+}
+.brand__sub {
+  font-size: var(--fs-xxs);
+  color: var(--c-text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar__close {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--c-text-muted);
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.sidebar__nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-1) 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border) transparent;
+}
+.sidebar__nav::-webkit-scrollbar { width: 6px; }
+.sidebar__nav::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 99px; }
+
+.nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3);
+  border-radius: var(--r-sm);
+  color: var(--c-text-muted);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
+  position: relative;
+}
+.nav-link i { width: 18px; height: 18px; flex: 0 0 18px; }
+.nav-link:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--c-text);
+}
+.nav-link.is-active {
+  background: linear-gradient(90deg, rgba(244, 198, 98, 0.14) 0%, rgba(244, 198, 98, 0) 100%);
+  color: var(--c-text-strong);
+  font-weight: 600;
+}
+.nav-link.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 99px;
+  background: var(--c-accent);
+  box-shadow: 0 0 12px rgba(244, 198, 98, 0.6);
+}
+
+.sidebar__foot {
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--c-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.save-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  padding: var(--sp-2) var(--sp-3);
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.20);
+  border-radius: var(--r-sm);
+}
+.save-indicator.is-saving { background: rgba(251, 191, 36, 0.06); border-color: rgba(251, 191, 36, 0.20); color: var(--c-warning); }
+.save-indicator.is-error  { background: rgba(251, 113, 133, 0.06); border-color: rgba(251, 113, 133, 0.20); color: var(--c-danger); }
+.save-indicator__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-success);
+  box-shadow: 0 0 8px var(--c-success);
+}
+.save-indicator.is-saving .save-indicator__dot { background: var(--c-warning); box-shadow: 0 0 8px var(--c-warning); }
+.save-indicator.is-error .save-indicator__dot { background: var(--c-danger); box-shadow: 0 0 8px var(--c-danger); }
+
+.sidebar__hint {
+  font-size: var(--fs-xxs);
+  color: var(--c-text-subtle);
+  padding: 0 var(--sp-3);
+}
+
+/* ===========================================================
+   Topbar (mobile)
+   =========================================================== */
+
+.topbar {
+  display: none;
+}
+
+/* ===========================================================
+   Main
+   =========================================================== */
+
+.main {
+  grid-area: main;
+  padding: var(--sp-6) var(--sp-7) var(--sp-10);
+  max-width: var(--container-max);
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ===========================================================
+   Responsive
+   =========================================================== */
+
+@media (max-width: 960px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--topbar-h) 1fr;
+    grid-template-areas:
+      "topbar"
+      "main";
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: min(86vw, 320px);
+    transform: translateX(-100%);
+    transition: transform var(--t-base);
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.is-open { transform: translateX(0); }
+
+  .sidebar__close { display: inline-flex; align-items: center; }
+
+  .topbar {
+    grid-area: topbar;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: 0 var(--sp-4);
+    background: var(--c-bg-deep);
+    border-bottom: 1px solid var(--c-border-soft);
+    height: var(--topbar-h);
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+  .topbar__menu,
+  .topbar__actions .icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--c-text);
+    padding: var(--sp-2);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .topbar__brand {
+    font-family: var(--ff-display);
+    font-weight: 800;
+    font-size: var(--fs-lg);
+    color: var(--c-text-strong);
+    flex: 1;
+  }
+  .topbar__actions { display: flex; align-items: center; gap: var(--sp-1); margin-left: auto; }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    z-index: 45;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t-base);
+  }
+  .sidebar-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .main {
+    padding: var(--sp-5) var(--sp-4) var(--sp-9);
+  }
+}
+
+.sidebar-backdrop { display: none; }
+@media (max-width: 960px) { .sidebar-backdrop { display: block; } }

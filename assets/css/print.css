@@ -1,0 +1,58 @@
+/* ===========================================================
+   GymTrack — Print report styles
+   Activated automatically by the browser when printing the
+   individual student report. Targets `#report-paper-print`
+   =========================================================== */
+
+@media print {
+  @page { margin: 18mm 14mm; }
+
+  /* Hide app chrome */
+  .sidebar, .topbar, .sidebar-backdrop,
+  .modal-container, .toast-container,
+  .report-builder > aside, .report-builder__controls,
+  #sidebar, .topbar__menu, .page-head__actions, .toolbar {
+    display: none !important;
+  }
+
+  body, .app-shell {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    background-image: none !important;
+  }
+
+  .main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+
+  .report-paper.print-payload {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    color: #0f172a !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Headings & text */
+  .report-paper h1,
+  .report-paper h2,
+  .report-paper h3 { color: #0f172a !important; page-break-after: avoid; }
+  .report-paper p,
+  .report-paper small,
+  .report-paper strong { color: #0f172a !important; }
+
+  /* Force sections to start on a new page when needed */
+  .report-paper section, .report-paper .report-section { page-break-inside: avoid; }
+
+  /* Ensure charts render well on print */
+  canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}

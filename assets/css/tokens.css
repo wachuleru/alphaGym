@@ -1,0 +1,133 @@
+/* ===========================================================
+   GymTrack — Design Tokens
+   "Sport Premium" · dark first
+   =========================================================== */
+
+:root {
+  /* Color · base */
+  --c-bg:               #0a1124;          /* primary canvas */
+  --c-bg-deep:          #060a18;          /* deeper blacks (sidebars, modals) */
+  --c-bg-elev-1:        #101a33;          /* surface level 1 */
+  --c-bg-elev-2:        #16213d;          /* surface level 2 (cards) */
+  --c-bg-elev-3:        #1d2a4d;          /* surface level 3 (inputs, hover) */
+  --c-border:           #243353;
+  --c-border-soft:      #1c2742;
+  --c-border-strong:    #324870;
+
+  /* Color · text */
+  --c-text:             #eef2ff;
+  --c-text-strong:      #ffffff;
+  --c-text-muted:       #94a3b8;
+  --c-text-subtle:      #64748b;
+  --c-text-inverse:     #0a1124;
+
+  /* Color · accent */
+  --c-accent:           #f4c662;          /* amber-gold: brand */
+  --c-accent-soft:      #f8d98a;
+  --c-accent-deep:      #c69a32;
+  --c-accent-bg:        rgba(244, 198, 98, 0.10);
+  --c-accent-bg-strong: rgba(244, 198, 98, 0.18);
+
+  --c-secondary:        #38bdf8;          /* electric cyan */
+  --c-secondary-bg:     rgba(56, 189, 248, 0.10);
+
+  /* Color · state */
+  --c-success:          #34d399;
+  --c-success-bg:       rgba(52, 211, 153, 0.12);
+  --c-warning:          #fbbf24;
+  --c-warning-bg:       rgba(251, 191, 36, 0.12);
+  --c-danger:           #fb7185;
+  --c-danger-bg:        rgba(251, 113, 133, 0.12);
+  --c-info:             #818cf8;
+  --c-info-bg:          rgba(129, 140, 248, 0.12);
+
+  /* Color · charts */
+  --chart-grid:         rgba(148, 163, 184, 0.10);
+  --chart-axis:         #64748b;
+  --chart-tooltip-bg:   #0c1530;
+  --chart-palette:
+      #f4c662, #38bdf8, #a78bfa, #34d399,
+      #fb7185, #fbbf24, #2dd4bf, #f472b6,
+      #60a5fa, #facc15;
+
+  /* Typography */
+  --ff-sans:            'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ff-display:         'Manrope', 'Inter', system-ui, sans-serif;
+  --ff-mono:            'JetBrains Mono', 'Consolas', monospace;
+
+  --fs-xxs:             0.6875rem;        /* 11 */
+  --fs-xs:              0.75rem;          /* 12 */
+  --fs-sm:              0.8125rem;        /* 13 */
+  --fs-md:              0.875rem;         /* 14 */
+  --fs-base:            0.9375rem;        /* 15 */
+  --fs-lg:              1rem;             /* 16 */
+  --fs-xl:              1.125rem;         /* 18 */
+  --fs-2xl:             1.375rem;         /* 22 */
+  --fs-3xl:             1.75rem;          /* 28 */
+  --fs-4xl:             2.25rem;          /* 36 */
+  --fs-5xl:             3rem;             /* 48 */
+  --fs-display:         4rem;             /* 64 — hero numbers */
+
+  --lh-tight:           1.15;
+  --lh-snug:            1.3;
+  --lh-normal:          1.5;
+  --lh-loose:           1.65;
+
+  /* Spacing — 4px base */
+  --sp-1:               4px;
+  --sp-2:               8px;
+  --sp-3:               12px;
+  --sp-4:               16px;
+  --sp-5:               20px;
+  --sp-6:               24px;
+  --sp-7:               32px;
+  --sp-8:               40px;
+  --sp-9:               48px;
+  --sp-10:              64px;
+  --sp-11:              96px;
+
+  /* Radius */
+  --r-xs:               6px;
+  --r-sm:               8px;
+  --r-md:               12px;
+  --r-lg:               16px;
+  --r-xl:               24px;
+  --r-pill:             999px;
+
+  /* Shadows — soft layered */
+  --shadow-xs:          0 1px 2px rgba(0, 0, 0, 0.20);
+  --shadow-sm:          0 4px 12px rgba(2, 6, 23, 0.30),
+                        0 1px 2px rgba(0, 0, 0, 0.20);
+  --shadow-md:          0 8px 24px rgba(2, 6, 23, 0.40),
+                        0 2px 4px rgba(0, 0, 0, 0.20);
+  --shadow-lg:          0 24px 48px rgba(2, 6, 23, 0.50),
+                        0 8px 16px rgba(0, 0, 0, 0.30);
+  --shadow-xl:          0 48px 80px rgba(2, 6, 23, 0.60);
+  --shadow-inset:       inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-glow:        0 0 0 1px rgba(244, 198, 98, 0.30),
+                        0 8px 24px rgba(244, 198, 98, 0.18);
+
+  /* Layout */
+  --sidebar-w:          260px;
+  --sidebar-w-mini:     76px;
+  --topbar-h:           56px;
+  --container-max:      1320px;
+
+  /* Transitions */
+  --t-fast:             120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --t-base:             180ms cubic-bezier(0.4, 0, 0.2, 1);
+  --t-slow:             280ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Focus ring */
+  --focus-ring:         0 0 0 3px rgba(244, 198, 98, 0.35);
+  --focus-ring-info:    0 0 0 3px rgba(56, 189, 248, 0.35);
+}
+
+/* Light mode reserved for print (print.css overrides) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
