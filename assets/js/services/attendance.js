@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Attendance service (schema v2)
+   ALPHA-FIT — Attendance service (schema v2)
    Each attendance now carries `trainingId` and `entries[]`
    of the workout actually performed that day.
    =========================================================== */

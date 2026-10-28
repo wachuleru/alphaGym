@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Attendance (global) view
+   ALPHA-FIT — Attendance (global) view
    =========================================================== */
 
 import { $, fmtDate, fmtTime, todayISO, fromISODate, debounce, initials } from '../utils.js';

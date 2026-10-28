@@ -1,4 +1,46 @@
-# GymTrack — Resumen de entrega
+# ALPHA-FIT — Resumen de entrega
+
+## 0.ter. Novedades en 2.2.0 (semanas justificadas)
+
+Un feriado que cae el día de entrenamiento **rompía la racha** del alumno, no por falta de constancia
+sino porque no tenía cómo ir. Con la meta por defecto de 2 sesiones/semana, un solo feriado anula la
+semana, y Chile tiene ~18 feriados al año: una racha de 8 semanas era un espejismo.
+
+Ahora existen **semanas justificadas**, que no cuentan ni a favor ni en contra:
+
+| Situación | Racha | Cumplimiento |
+|---|---|---|
+| Justificada **y vacía** | se salta: no suma, no corta | sale del denominador |
+| Justificada **y cumplida igual** | cuenta como cualquier buena semana | cuenta como cumplida |
+
+La justificación **sólo puede ayudar**: nunca resta y nunca agrega semanas que el alumno no entrenó.
+
+Dos alcances, como se pidió:
+
+- **Global** — colección `closures[]`: feriados nacionales y cierres del gimnasio. Se registra una vez
+  y aplica a todos los alumnos.
+- **Por alumno** — `student.exemptWeeks[]`: enfermedad, viajes, permiso. Para eso que un cierre
+  global no puede cubrir.
+
+Se gestionan en **Datos y configuración → Justificaciones**: bloque nuevo con dos formularios (fechas
+y motivo para el cierre global; alumno + cualquier día de la semana para el individual), listas con
+botón de deshacer, y la racha y el cumplimiento del alumno visible en vivo junto a su lista.
+
+Nada se cachea: `computeStudentMetrics()` lee `closures[]` en cada render, así que **eliminar una
+justificación restituye el veredicto al instante**.
+
+Medido sobre un alumno con meta 2 y 7 semanas de historial donde la semana −2 tiene una sola sesión:
+
+```
+  sin justificar                   racha 1  ·  cumplimiento 71%
+  con feriado justificado          racha 5  ·  cumplimiento 83%
+  feriado eliminado                racha 1  ·  cumplimiento 71%
+  justificado sólo para Camila     racha 5  ·  cumplimiento 83%
+```
+
+También se corrigió la tira de semanas de la ficha del alumno: usaba `weekKeys` (semanas **con**
+asistencia), así que una semana vacía —justo la que rompe la racha— desaparecía de la vista. Ahora
+renderiza `recentWeeks`, las últimas 8 semanas calendario, y marca las justificadas como `libre`.
 
 ## 0.bis. Corrección en 2.1.1 — las rachas
 
@@ -250,7 +292,7 @@ Ver [docs/excel-import-export.md](docs/excel-import-export.md). Cubre:
 
 - **Migración v1 → v2 destructiva.** No hay conversión automática de datos: la v1 se archiva tal
   cual y la v2 empieza vacía. Reconstruir el historial de la v1 es trabajo manual, aunque la copia
-  queda disponible para abrirla con GymTrack 1.x.
+  queda disponible para abrirla con ALPHA-FIT 1.x.
 - **Aplicación local.** No sincroniza entre dispositivos. Para mover la información entre dispositivos se usa el respaldo JSON.
 - **Datos atados al navegador.** Si el usuario borra los datos del sitio (`localStorage.clear()`), cambia de navegador o de equipo, puede perder la información si no tiene un respaldo.
 - **Sin autenticación multiusuario.** No hay roles ni inicio de sesión. Está diseñado para uso por un único administrador.
@@ -292,7 +334,7 @@ Resultado: **ALL OK: 20 passed, 0 failed.**
 - Pago → marcar como pagado → consulta de `totalReceivedInMonth`.
 - Generación de datos demo: **14 alumnos**.
 
-Y **74 asserts** de esquema v2 (32 de categorías, 13 de rachas):
+Y **99 asserts** de esquema v2 (32 de categorías, 13 de rachas, 25 de justificaciones):
 - Round-trip de entradas (snapshots de nombre/grupos, `extra`, `order`).
 - Dupe del mismo día → edita el registro existente, no crea otro.
 - `lastWeightKg` se **recalcula al guardar** (backdating) y es idempotente.
@@ -317,7 +359,26 @@ fecha en que se ejecute:
 - Cumplimiento: 3 semanas de 12 → 25% (antes 100%); 0 asistencias → 0%; la ventana arranca en la
   inscripción.
 
-Resultado: **ALL OK: 74 passed, 0 failed.**
+**Justificaciones (25 asserts)**:
+- Un cierre global sobre la semana débil restituye la racha (1 → 4); `exemptWeeks` del alumno hace
+  exactamente lo mismo.
+- Una justificación que **no** cubre la semana que rompió la racha no sirve de nada.
+- Una semana justificada **y cumplida igual** sigue contando (3 → 3, no 2).
+- Cumplimiento: la semana justificada sale del denominador (4/12 → 4/11) en vez de puntuar como fallo.
+- **Nada se cachea**: borrar el cierre restituye el veredicto viejo en la misma corrida.
+- `createClosure` rechaza fecha no ISO, término anterior al inicio, término mal formado y rangos
+  desmedidos (>31 días).
+- Dos cierres en la misma semana colapsan en una semana exenta; un rango de una semana completa
+  resuelve a su lunes.
+- `setWeekExempt`: cualquier día de la semana mapea a la misma clave, es idempotente, se puede
+  revertir y rechaza claves mal formadas.
+- La tira siempre renderiza `STRIP_WEEKS` semanas calendario, incluidas las vacías.
+- **Guarda de terminación**: cuatro semanas justificadas seguidas se saltan y el recorrido igual
+  termina. El piso de la racha es la inscripción, **no** la primera asistencia — un alumno que se
+  inscribió hace 11 semanas pero empezó a entrenar hace 5 conserva su racha.
+- El mismo hueco sin justificar rompe la racha, que es justamente lo que la función viene a arreglar.
+
+Resultado: **ALL OK: 99 passed, 0 failed.**
 
 ### Integridad de módulos
 - `tests/browser-link.mjs` → **30/30 módulos importables** (todos los archivos JS del navegador).
@@ -351,7 +412,7 @@ Resultado: **ALL OK: 74 passed, 0 failed.**
 - Export JSON (tamaño verificado).
 - Wipe completo.
 - Import del mismo archivo (alumno presente).
-- Rechazo de archivo de otra app (`app !== "GymTrack"`).
+- Rechazo de archivo de otra app (`app` distinto de `ALPHA-FIT`; se acepta también el nombre anterior `GymTrack`).
 - Rechazo de texto no JSON.
 
 Resultado: **OK.**
@@ -391,4 +452,4 @@ Ninguna dependencia es requerida en el repositorio ni necesita build.
 
 ---
 
-**GymTrack** — software local de administración. Tus datos son tuyos.
+**ALPHA-FIT** — software local de administración. Tus datos son tuyos.

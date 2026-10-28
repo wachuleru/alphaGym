@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Dashboard view
+   ALPHA-FIT — Dashboard view
    =========================================================== */
 
 import { $, el, fmtDate, todayISO, fromISODate, fmtCLP, fmtPct, fmtTime, relativeTime, sortBy, MONTHS_ES } from '../utils.js';
@@ -178,7 +178,7 @@ function calcStats() {
   // % students meeting weekly goal
   let meetingGoal = 0;
   for (const s of activeStudents) {
-    const m = computeStudentMetrics(s, attendances, db.measurements, db.goals);
+    const m = computeStudentMetrics(s, attendances, db.measurements, db.goals, db.closures);
     if (m.streakWeeks >= 1 && m.totalAttendances >= (s.weeklyGoal || 2)) meetingGoal++;
   }
   const compliancePct = activeStudents.length ? (meetingGoal / activeStudents.length) * 100 : 0;
@@ -527,7 +527,7 @@ function buildLevelsChart() {
   const labels = LEVELS.map((l) => l.name);
   const counts = LEVELS.map((l) => 0);
   for (const s of (db.students || [])) {
-    const m = computeStudentMetrics(s, db.attendances, db.measurements, db.goals);
+    const m = computeStudentMetrics(s, db.attendances, db.measurements, db.goals, db.closures);
     const lv = determineLevel(m);
     const idx = LEVELS.findIndex((l) => l.id === lv.id);
     if (idx >= 0) counts[idx]++;

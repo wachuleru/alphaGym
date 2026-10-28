@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Lucide helpers
+   ALPHA-FIT — Lucide helpers
    The CDN script defines `window.lucide`. We re-render icons
    after every DOM mutation via `app.refreshIcons()`.
    =========================================================== */

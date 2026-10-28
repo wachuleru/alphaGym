@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Entry logic (pure)
+   ALPHA-FIT — Entry logic (pure)
    Preload algorithm, draft assembly, weight delta formatter.
 
    Pure: only depends on utils.js. No DOM, no localStorage.

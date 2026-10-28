@@ -1,11 +1,12 @@
 /* ===========================================================
-   GymTrack — Individual student reports
+   ALPHA-FIT — Individual student reports
    Builds printable HTML for the chosen sections.
    =========================================================== */
 
 import { fmtDate, fmtCLP, fromISODate } from '../utils.js';
-import { LEVELS, MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE, NO_CATEGORY_LABEL } from '../config.js';
+import { LEVELS, MUSCLE_GROUP_BY_VALUE, IMPLEMENT_BY_VALUE, NO_CATEGORY_LABEL, APP_NAME } from '../config.js';
 import { computeStudentMetrics, determineLevel, progressToNext, earnedBadges } from './levels.js';
+import { listClosures } from './closures.js';
 import { fullName } from './students.js';
 import { listAttendances } from './attendance.js';
 import { listMeasurements, MEASURE_FIELDS, getMeasureLabel, getMeasureUnit } from './measurements.js';
@@ -35,7 +36,7 @@ export function buildReportContext(student, opts) {
     toISO: opts?.toISO || null,
   };
   const allAtt = listAttendances().filter((a) => a.studentId === student.id);
-  const metrics = computeStudentMetrics(student, allAtt, listMeasurements(), []);
+  const metrics = computeStudentMetrics(student, allAtt, listMeasurements(), [], listClosures());
 
   // Pre-compute workout sessions for the print block (newest first, last 10).
   const workoutSessions = allAtt
@@ -98,7 +99,7 @@ function fmtPeriod(p) {
   return `${f} a ${t}`;
 }
 
-export function renderReport(ctx, gymName = 'GymTrack') {
+export function renderReport(ctx, gymName = APP_NAME) {
   const e = escape;
   const s = ctx.student;
   const full = fullName(s);
@@ -169,9 +170,16 @@ export function renderReport(ctx, gymName = 'GymTrack') {
   return `
     <article class="report-paper print-payload">
       <header>
+        <div class="report-brand">
+          <img class="report-brand__logo" src="./assets/img/logo-ink.svg" alt="" width="54" height="32" />
+          <div class="report-brand__text">
+            <strong>${e(gymName)}</strong>
+            <small>Gestión integral del gimnasio</small>
+          </div>
+        </div>
         <h1>Informe de progreso</h1>
         <div class="report-meta">
-          <strong>${e(gymName)}</strong> · Generado el ${fmtDate(ctx.generatedAt.slice(0,10))} ·
+          Generado el ${fmtDate(ctx.generatedAt.slice(0,10))} ·
           Alumno: <strong>${e(full)}</strong> · Período: <strong>${fmtPeriod(ctx.period)}</strong>
         </div>
       </header>
@@ -334,7 +342,7 @@ export function renderReport(ctx, gymName = 'GymTrack') {
       ` : ''}
 
       <footer style="margin-top:24px; padding-top:16px; border-top:1px solid #e2e8f0; color:#94a3b8; font-size:11px">
-        Generado con GymTrack · Los datos provienen del registro administrativo.
+        Generado con ${APP_NAME} · Los datos provienen del registro administrativo.
       </footer>
     </article>
   `;

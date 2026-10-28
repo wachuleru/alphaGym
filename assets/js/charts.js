@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Charts helpers
+   ALPHA-FIT — Charts helpers
    Tiny wrapper around Chart.js with shared dark theme.
    We track instances to destroy them between renders.
    =========================================================== */

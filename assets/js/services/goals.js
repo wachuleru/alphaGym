@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Goals service
+   ALPHA-FIT — Goals service
    =========================================================== */
 
 import { getState, setState } from '../storage.js';

@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Notes service (private, NOT exported in reports by default)
+   ALPHA-FIT — Notes service (private, NOT exported in reports by default)
    =========================================================== */
 
 import { getState, setState } from '../storage.js';

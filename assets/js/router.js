@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — hash-based router
+   ALPHA-FIT — hash-based router
    Hash format:
      #/dashboard
      #/students

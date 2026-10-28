@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — entry point
+   ALPHA-FIT — entry point
    Bootstraps: storage, router, navigation, sidebar, save status
    =========================================================== */
 
@@ -14,6 +14,7 @@ import {
 } from './storage.js';
 import { initIcons, refreshIcons } from './icons.js';
 import { destroyAll as destroyAllCharts } from './charts.js';
+import { APP_NAME } from './config.js';
 
 // Archive any v1 database before opening v2 (one-shot, idempotent).
 // Skip in environments without localStorage (e.g. Node tests).
@@ -40,10 +41,10 @@ function showMigrationNoticeIfNeeded() {
     body.innerHTML = `
       <p>Actualizamos el modelo de entrenamientos. Tus datos v1 quedaron archivados de forma automática y la base v2 comienza vacía.</p>
       ${rows ? `<ul class="stack-2" style="list-style:disc;padding-left:1.25rem;margin-bottom:var(--sp-3)">${rows}</ul>` : ''}
-      <p class="t-muted" style="font-size:var(--fs-sm)">Si quieres conservar una copia de la base anterior, descárgala ahora. Después podrás seguir usando GymTrack con el catálogo de ejercicios y entrenamientos compartibles.</p>
+      <p class="t-muted" style="font-size:var(--fs-sm)">Si quieres conservar una copia de la base anterior, descárgala ahora. Después podrás seguir usando ${APP_NAME} con el catálogo de ejercicios y entrenamientos compartibles.</p>
     `;
     openModal({
-      title: 'Bienvenido a GymTrack 2.0',
+      title: `Bienvenido a ${APP_NAME} 2.0`,
       size: 'sm',
       body,
       actions: [
@@ -147,8 +148,8 @@ function setupWorkspaceTitle() {
       payments:      'Pagos',
       reports:       'Informes',
       settings:      'Datos y configuración',
-    })[seg] || 'GymTrack';
-    document.title = `GymTrack · ${document.title}`;
+    })[seg] || APP_NAME;
+    document.title = `${APP_NAME} · ${document.title}`;
   });
 }
 
@@ -262,7 +263,7 @@ if (typeof document !== 'undefined') {
   onNavigate(() => destroyAllCharts());
 
   // Helpful diagnostic in console
-  console.info(`%c GymTrack %c v${(window.__gt && window.__gt.version) || '2.0.0'} `,
+  console.info(`%c ${APP_NAME} %c v${(window.__gt && window.__gt.version) || '2.0.0'} `,
     'background:#f4c662;color:#0a1124;padding:2px 6px;border-radius:3px 0 0 3px;font-weight:700',
     'background:#0a1124;color:#f4c662;padding:2px 6px;border-radius:0 3px 3px 0');
 }

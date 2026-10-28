@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Workouts view (Trainings + categories + exercises)
+   ALPHA-FIT — Workouts view (Trainings + categories + exercises)
    =========================================================== */
 
 import { $, $$, el } from '../utils.js';

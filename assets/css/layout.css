@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Layout (sidebar + topbar + main)
+   ALPHA-FIT — Layout (sidebar + topbar + main)
    =========================================================== */
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -56,6 +56,11 @@ button { font-family: inherit; }
   grid-template-rows: 1fr;
   grid-template-areas: "sidebar main";
   min-height: 100dvh;
+  /* La fila se dimensiona contra min-height, así que el área del sidebar quedaba
+     clipada al alto de la pantalla y `sticky` no tenía espacio para deslizarse
+     (el menú se iba con el scroll). Con max-content la columna mide lo que
+     mide la página: el panel queda fijo y sólo se mueve la columna derecha. */
+  height: max-content;
 }
 
 /* ===========================================================
@@ -91,15 +96,10 @@ button { font-family: inherit; }
   min-width: 0;
 }
 
-.brand__mark {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-md);
-  background: linear-gradient(135deg, var(--c-accent) 0%, var(--c-accent-deep) 100%);
-  color: var(--c-text-inverse);
-  box-shadow: var(--shadow-glow), var(--shadow-xs);
+.brand__logo {
+  display: block;
+  width: 46px;
+  height: auto;
   flex: 0 0 auto;
 }
 
@@ -292,11 +292,21 @@ button { font-family: inherit; }
     cursor: pointer;
   }
   .topbar__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
     font-family: var(--ff-display);
     font-weight: 800;
     font-size: var(--fs-lg);
     color: var(--c-text-strong);
     flex: 1;
+    min-width: 0;
+  }
+  .topbar__logo {
+    display: block;
+    width: 34px;
+    height: auto;
+    flex: 0 0 auto;
   }
   .topbar__actions { display: flex; align-items: center; gap: var(--sp-1); margin-left: auto; }
 

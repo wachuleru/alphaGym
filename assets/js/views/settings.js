@@ -1,8 +1,8 @@
 /* ===========================================================
-   GymTrack — Settings view (data, backup, Excel, demo, themes)
+   ALPHA-FIT — Settings view (data, backup, Excel, demo, themes)
    =========================================================== */
 
-import { $, el, fmtDate, todayISO, downloadBlob } from '../utils.js';
+import { $, el, fmtDate, fmtPct, todayISO, downloadBlob } from '../utils.js';
 import {
   exportJSON, importJSON, installSeed, removeDemo, wipe, getState,
   getLegacyArchive, downloadLegacyArchive, restoreLegacyKey, deleteLegacyArchive,
@@ -10,9 +10,16 @@ import {
 import { APP_NAME, APP_VERSION, SCHEMA_VERSION } from '../config.js';
 import { refreshIcons } from '../icons.js';
 import { openModal, confirmDialog, toast, toastError } from '../components.js';
+import { listClosures, createClosure, deleteClosure, weekKeyOf } from '../services/closures.js';
+import { listStudents, fullName, exemptWeeksOf, setWeekExempt } from '../services/students.js';
+import { listAttendances } from '../services/attendance.js';
+import { computeStudentMetrics } from '../services/levels.js';
 
 const escapeHtml = (s) => String(s || '').replace(/[<>&"']/g, (c) =>
   ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;' }[c]));
+
+/** Which student's personal exemptions are on screen. Survives re-renders. */
+let closureStudentId = '';
 
 export async function renderSettings() {
   const main = $('#main');
@@ -33,6 +40,7 @@ export async function renderSettings() {
     <div class="settings-grid">
       <aside class="settings-nav">
         <a href="#data" data-scroll="sec-data" class="is-active"><i data-lucide="database"></i>Datos</a>
+        <a href="#closures" data-scroll="sec-closures"><i data-lucide="calendar-off"></i>Justificaciones</a>
         <a href="#backup" data-scroll="sec-backup"><i data-lucide="save"></i>Respaldo</a>
         <a href="#excel" data-scroll="sec-excel"><i data-lucide="file-spreadsheet"></i>Excel</a>
         <a href="#demo" data-scroll="sec-demo"><i data-lucide="sparkles"></i>Datos demo</a>
@@ -88,6 +96,8 @@ export async function renderSettings() {
           </div>
         </article>
 
+        ${closuresHtml()}
+
         <article class="card" id="sec-backup">
           <header class="card__header"><h3 class="card__title">Respaldo y restauración</h3></header>
           <div class="card__body stack-4">
@@ -114,7 +124,7 @@ export async function renderSettings() {
             <p class="muted-block">
               Al pasar al esquema v2 (catálogo de ejercicios + entrenamientos compartibles) tu base v1 se archivó
               automáticamente el <strong>${archive.archivedAt ? fmtDate(archive.archivedAt.slice(0,10)) : '—'}</strong>.
-              La copia se guarda aparte y <strong>GymTrack 2.0 no la lee</strong>: es sólo una red de seguridad.
+              La copia se guarda aparte y <strong>ALPHA-FIT 2.0 no la lee</strong>: es sólo una red de seguridad.
             </p>
             <div class="card" style="padding:var(--sp-3) var(--sp-4); background:var(--c-bg-elev-1)">
               ${Object.entries(archive.counts || {})
@@ -129,7 +139,7 @@ export async function renderSettings() {
             </div>
             <p class="t-muted" style="font-size:var(--fs-xs)">
               "Restaurar clave v1" vuelve a escribir la base antigua en <code>gymtrack:db:v1</code> para que puedas
-              abrirla con GymTrack 1.x. Tus datos v2 no se tocan.
+              abrirla con ALPHA-FIT 1.x. Tus datos v2 no se tocan.
             </p>
           </div>
         </article>
@@ -221,6 +231,142 @@ function refreshDemoCount() {
   if (elx) elx.textContent = c;
 }
 
+/* ===========================================================
+   Justificaciones — semanas que no cuentan ni a favor ni en contra
+   =========================================================== */
+
+const EMPTY_ROW = '<tr><td colspan="2" class="t-muted" style="text-align:center;padding:var(--sp-4)">Nada registrado</td></tr>';
+
+function closuresHtml() {
+  const closures = listClosures();
+  const students = listStudents();
+  const attendances = listAttendances();
+
+  // Keep the selection pointing at a student that still exists.
+  if (!students.some((s) => s.id === closureStudentId)) closureStudentId = students[0]?.id || '';
+  const student = students.find((s) => s.id === closureStudentId) || null;
+  const weeks = exemptWeeksOf(student);
+  const metrics = student ? computeStudentMetrics(student, attendances, [], [], closures) : null;
+
+  const closureRows = closures.length
+    ? closures.map((c) => {
+        const span = c.endISO && c.endISO !== c.dateISO
+          ? `${fmtDate(c.dateISO)} – ${fmtDate(c.endISO)}`
+          : fmtDate(c.dateISO);
+        return `<tr>
+          <td>${escapeHtml(span)}</td>
+          <td>${escapeHtml(c.name)}</td>
+          <td class="row-actions">
+            <button class="btn btn--icon btn--danger btn--sm" data-clo-del="${c.id}" title="Eliminar este cierre"><i data-lucide="trash-2"></i></button>
+          </td>
+        </tr>`;
+      }).join('')
+    : EMPTY_ROW;
+
+  const weekRows = weeks.length
+    ? weeks.slice().reverse().map((w) => `<tr>
+        <td>Semana del ${escapeHtml(fmtDate(w))}</td>
+        <td class="row-actions">
+          <button class="btn btn--icon btn--danger btn--sm" data-week-del="${w}" title="Volver a contar esta semana"><i data-lucide="undo-2"></i></button>
+        </td>
+      </tr>`).join('')
+    : EMPTY_ROW;
+
+  return `
+    <article class="card" id="sec-closures">
+      <header class="card__header">
+        <h3 class="card__title"><i data-lucide="calendar-off"></i> Semanas justificadas</h3>
+      </header>
+      <div class="card__body stack-5">
+        <p class="muted-block">
+          Una semana justificada <strong>no cuenta ni a favor ni en contra</strong>: no suma a la racha,
+          no la corta, y sale del cálculo de cumplimiento semanal. Sirve para feriados nacionales,
+          cierres del gimnasio, y para días en que un alumno estuvo enfermo o de viaje.
+          Nada se guarda como "racha": esto sólo cambia qué semanas se evalúan.
+        </p>
+
+        <div class="stack-4">
+          <div class="between">
+            <h4 class="form-section__title" style="margin:0">Feriados y cierres del gimnasio</h4>
+            <span class="t-muted" style="font-size:var(--fs-xs)">aplican a todos los alumnos</span>
+          </div>
+
+          <div class="form-grid" style="align-items:end">
+            <div class="field">
+              <label class="field__label" for="setCloDate">Desde</label>
+              <input class="input" type="date" id="setCloDate" />
+            </div>
+            <div class="field">
+              <label class="field__label" for="setCloEnd">Hasta <span class="t-muted">(opcional)</span></label>
+              <input class="input" type="date" id="setCloEnd" />
+            </div>
+            <div class="field">
+              <label class="field__label" for="setCloName">Motivo</label>
+              <input class="input" type="text" id="setCloName" placeholder="Feriado nacional" maxlength="60" />
+            </div>
+            <div class="field">
+              <button class="btn btn--primary" id="setCloAdd"><i data-lucide="plus"></i>Agregar cierre</button>
+            </div>
+          </div>
+          <p class="field__hint" style="margin-top:calc(-1 * var(--sp-2))">
+            Se justifica la <strong>semana completa</strong> que contiene la fecha. Deja "Hasta"
+            vacío para un feriado de un solo día, o complétalo si el gimnasio cierra varios días.
+          </p>
+
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Fecha</th><th>Motivo</th><th></th></tr></thead>
+              <tbody>${closureRows}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="stack-4">
+          <div class="between">
+            <h4 class="form-section__title" style="margin:0">Justificaciones individuales</h4>
+            <span class="t-muted" style="font-size:var(--fs-xs)">enfermedad, viajes, permiso</span>
+          </div>
+
+          ${students.length ? `
+          <div class="form-grid" style="align-items:end">
+            <div class="field">
+              <label class="field__label" for="setCloStudent">Alumno</label>
+              <select class="select" id="setCloStudent">
+                ${students.map((s) => `<option value="${s.id}" ${s.id === closureStudentId ? 'selected' : ''}>${escapeHtml(fullName(s))}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label" for="setWeekDate">Cualquier día de la semana</label>
+              <input class="input" type="date" id="setWeekDate" />
+            </div>
+            <div class="field">
+              <button class="btn btn--primary" id="setWeekAdd"><i data-lucide="plus"></i>Justificar semana</button>
+            </div>
+          </div>
+          <p class="field__hint" style="margin-top:calc(-1 * var(--sp-2))">
+            Da igual qué día elijas: se justifica la semana calendario (lunes a domingo) que lo contiene.
+          </p>
+          ` : '<p class="muted-block">Todavía no hay alumnos registrados.</p>'}
+
+          ${student ? `
+          <div class="card" style="padding:var(--sp-3) var(--sp-4); background:var(--c-bg-elev-1)">
+            <div class="between" style="font-size:var(--fs-sm)">
+              <span class="t-muted">${escapeHtml(fullName(student))} · meta ${metrics.weeklyGoal}/semana</span>
+              <span><strong>Racha ${metrics.streakWeeks}</strong> <span class="t-muted">·</span> <strong>Cumplimiento ${escapeHtml(fmtPct(metrics.weeklyCompliance * 100))}</strong></span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Semana justificada</th><th></th></tr></thead>
+              <tbody>${weekRows}</tbody>
+            </table>
+          </div>
+          ` : ''}
+        </div>
+      </div>
+    </article>`;
+}
+
 function bind() {
   // Export / Import
   $('#setExport')?.addEventListener('click', () => {
@@ -286,7 +432,7 @@ function bind() {
   $('#setLegacyRestore')?.addEventListener('click', async () => {
     const ok = await confirmDialog({
       title: 'Restaurar la base v1',
-      message: 'GymTrack 2.0 no lee la base v1. Esta acción la escribe de nuevo en la clave "gymtrack:db:v1" para que puedas abrirla con GymTrack 1.x. Tus datos v2 no se tocan.',
+      message: 'ALPHA-FIT 2.0 no lee la base v1. Esta acción la escribe de nuevo en la clave "gymtrack:db:v1" para que puedas abrirla con ALPHA-FIT 1.x. Tus datos v2 no se tocan.',
       confirmLabel: 'Restaurar v1',
       confirmKind: 'secondary',
     });
@@ -295,7 +441,7 @@ function bind() {
     toast({
       type: done ? 'success' : 'error',
       message: done
-        ? 'Base v1 restaurada. Ábrela con GymTrack 1.x.'
+        ? 'Base v1 restaurada. Ábrela con ALPHA-FIT 1.x.'
         : 'No se pudo restaurar la base v1.',
     });
   });
@@ -352,6 +498,44 @@ function bind() {
     wipe();
     toast({ type: 'success', message: 'Base reiniciada.' });
     refreshDemoCount();
+  });
+
+  // Justificaciones — cierres globales
+  $('#setCloAdd')?.addEventListener('click', async () => {
+    const dateISO = $('#setCloDate').value;
+    const endISO = $('#setCloEnd').value || null;
+    const res = createClosure({ dateISO, endISO, name: $('#setCloName').value });
+    if (!res.ok) { toastError(res.error); return; }
+    toast({ type: 'success', message: 'Semana justificada para todos los alumnos.' });
+    await renderSettings();
+  });
+  document.querySelectorAll('[data-clo-del]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      deleteClosure(btn.dataset.cloDel);
+      toast({ type: 'success', message: 'Cierre eliminado.' });
+      await renderSettings();
+    });
+  });
+
+  // Justificaciones — por alumno
+  $('#setCloStudent')?.addEventListener('change', async (e) => {
+    closureStudentId = e.target.value;
+    await renderSettings();
+  });
+  $('#setWeekAdd')?.addEventListener('click', async () => {
+    const dateISO = $('#setWeekDate').value;
+    if (!dateISO) { toastError('Elige una fecha de la semana a justificar.'); return; }
+    if (!closureStudentId) { toastError('No hay alumno seleccionado.'); return; }
+    setWeekExempt(closureStudentId, weekKeyOf(dateISO), true);
+    toast({ type: 'success', message: 'Semana justificada.' });
+    await renderSettings();
+  });
+  document.querySelectorAll('[data-week-del]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      setWeekExempt(closureStudentId, btn.dataset.weekDel, false);
+      toast({ type: 'success', message: 'La semana vuelve a contar.' });
+      await renderSettings();
+    });
   });
 
   // Settings nav scroll

@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Health indices (IMC, ICE, ICC)
+   ALPHA-FIT — Health indices (IMC, ICE, ICC)
    Pure functions. No DOM, no storage.
    =========================================================== */
 

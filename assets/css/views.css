@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Views
+   ALPHA-FIT — Views
    Dashboard · Students · Student detail · Attendance ·
    Workouts · Progress · Payments · Reports · Settings
    =========================================================== */
@@ -451,6 +451,11 @@
 }
 .report-paper h1, .report-paper h2, .report-paper h3 { font-family: 'Manrope', sans-serif; color: #0b1325; }
 .report-paper h1 { font-size: 24px; margin: 0 0 6px; }
+.report-paper .report-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.report-paper .report-brand__logo { display: block; width: 54px; height: auto; flex: 0 0 auto; }
+.report-paper .report-brand__text { display: flex; flex-direction: column; line-height: 1.25; }
+.report-paper .report-brand__text strong { font-family: 'Manrope', sans-serif; font-size: 15px; letter-spacing: 0.02em; }
+.report-paper .report-brand__text small { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; }
 .report-paper .report-meta { color: #64748b; font-size: 12px; margin-bottom: 20px; }
 .report-paper .report-section { padding: 16px 0; border-top: 1px solid #e2e8f0; }
 .report-paper .report-section:first-child { border-top: none; }

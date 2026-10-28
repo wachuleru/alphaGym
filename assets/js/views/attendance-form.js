@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Attendance form (shared modal)
+   ALPHA-FIT — Attendance form (shared modal)
    Replaces the three legacy register call sites:
      - views/attendance.js   ("Registrar asistencia" button)
      - views/student-detail  (sdRegisterAtt + Workouts tab)

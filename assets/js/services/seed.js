@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Seed demo data (schema v2)
+   ALPHA-FIT — Seed demo data (schema v2)
    Marked with `meta.isDemo` so the user can later wipe it.
    =========================================================== */
 
@@ -373,8 +373,8 @@ export function buildSeed() {
   return {
     meta: {
       version: 2,
-      appVersion: '2.1.1',
-      appName: 'GymTrack',
+      appVersion: '2.2.0',
+      appName: 'ALPHA-FIT',
       createdAt: new Date().toISOString(),
       lastExportAt: null,
       lastImportAt: null,
@@ -384,13 +384,24 @@ export function buildSeed() {
       weekStartDay: 1,
       currency: 'CLP',
       defaultWeeklyGoal: 2,
-      gymName: 'GymTrack Demo',
+      gymName: 'ALPHA-FIT Demo',
       theme: 'dark',
     },
     students: studentRecords,
     attendances: attendanceRecords,
     exercises,
     trainingCategories: categories,
+    // One demo closure so the "Semanas justificadas" block in Ajustes has
+    // something to show and the effect on a streak is visible. Marked isDemo,
+    // so "Eliminar datos demo" takes it with the rest.
+    closures: [{
+      id: uid('clo'),
+      dateISO: toISODate(addDays(new Date(), -14)),
+      endISO: toISODate(addDays(new Date(), -14)),
+      name: 'Feriado (demo)',
+      createdAt: todayISO(),
+      meta: { createdAt: new Date().toISOString(), isDemo: true },
+    }],
     trainings,
     measurements: measurementRecords,
     goals: goalRecords,

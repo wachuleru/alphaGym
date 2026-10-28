@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — utilities: dates, ids, dom, formatters
+   ALPHA-FIT — utilities: dates, ids, dom, formatters
    =========================================================== */
 
 import { CURRENCY, WEEK_START_DAY } from './config.js';

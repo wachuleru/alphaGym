@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Payments view (global)
+   ALPHA-FIT — Payments view (global)
    =========================================================== */
 
 import { $, el, fmtDate, fmtCLP, todayISO, fromISODate } from '../utils.js';

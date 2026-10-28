@@ -1,4 +1,4 @@
-# GymTrack
+# ALPHA-FIT
 
 Plataforma de administración y seguimiento para gimnasios. Permite registrar alumnos, controlar asistencia, llevar un catálogo de ejercicios y plantillas de entrenamiento compartibles, seguir progreso físico, gestionar mensualidades, generar informes imprimibles y respaldar toda la información — todo desde el navegador, sin backend.
 
@@ -15,6 +15,7 @@ Plataforma de administración y seguimiento para gimnasios. Permite registrar al
 - 🎯 Objetivos individuales configurables
 - 💳 Pagos, mensualidades, vencimientos e ingresos
 - 🏆 Sistema de niveles por constancia e insignias por hitos
+- 🗓️ Semanas justificadas (feriados, cierres, enfermedad) que no rompen la racha ni el cumplimiento
 - 📊 Dashboard con indicadores reales (no ficticios)
 - 📄 Informes individuales imprimibles / exportables a PDF
 - 💾 Respaldo y restauración JSON completa
@@ -38,6 +39,7 @@ Sin frameworks. Sin backend. Sin build step.
 ```
 /
 ├── index.html
+├── favicon.svg            Ícono del navegador (marca ALPHA-FIT)
 ├── README.md
 ├── docs/
 │   ├── data-model.md
@@ -49,6 +51,10 @@ Sin frameworks. Sin backend. Sin build step.
     │   ├── components.css    Botones, tarjetas, tablas, modales, formularios
     │   ├── views.css         Estilos por vista
     │   └── print.css         Informe PDF
+    ├── img/
+    │   ├── logo.svg          Marca en blanco (interfaz oscura)
+    │   ├── logo-ink.svg      Marca en tinta (informe impreso, fondo claro)
+    │   └── logo-lockup.svg   Marca completa con wordmark
     └── js/
         ├── config.js         Constantes, niveles por defecto
         ├── storage.js        Capa de persistencia localStorage
@@ -81,6 +87,8 @@ attendances        → la sesión       { id, studentId, trainingId, dateISO, en
               └─ entries[] = { exerciseId, order, extra, name, muscleGroups[],
                                sets, reps, weightKg, implement, observation,
                                lastWeightKg }
+closures           → justificaciones { id, dateISO, endISO, name }  (global: feriado / cierre)
+students.exemptWeeks[]               (individual: enfermedad, viaje, permiso)
 ```
 
 - Una **categoría no es un plan**: sólo agrupa y filtra los entrenamientos ("Tren superior",
@@ -91,6 +99,8 @@ attendances        → la sesión       { id, studentId, trainingId, dateISO, en
 - `lastWeightKg` es la línea base del delta y se **recalcula cada vez que se guarda**,
   no queda congelada al crear (así registrar una sesión con fecha retroactiva no miente).
 - Borrar una **categoría nunca borra entrenamientos**: quedan como "Sin categoría".
+- Una **semana justificada** no cuenta ni a favor ni en contra: no suma a la racha, no la corta, y
+  sale del cumplimiento. Un feriado no es una falta de constancia.
 
 Ver [docs/data-model.md](docs/data-model.md) para el detalle completo.
 
@@ -129,14 +139,14 @@ No se necesita build, ni Node, ni nada extra.
 ### Desde la v1 (2.0)
 
 El esquema v2 separa catálogo, plantillas y ejecución real, así que **no hay migración automática**:
-la primera vez que abres GymTrack 2.0, tu base v1 se archiva tal cual en `gymtrack:archive:v1`
+la primera vez que abres ALPHA-FIT 2.0, tu base v1 se archiva tal cual en `gymtrack:archive:v1`
 y la v2 empieza vacía. Desde **Datos y configuración** aparece un bloque
 *"Archivo de la versión anterior (v1)"* con tres acciones:
 
 | Acción | Qué hace |
 |---|---|
 | **Descargar copia v1** | Guarda `gymtrack_v1_<fecha>.json` en tu equipo. Hazlo antes de nada. |
-| **Restaurar clave v1** | Vuelve a escribir la base antigua en `gymtrack:db:v1` para abrirla con GymTrack 1.x. Tus datos v2 no se tocan. |
+| **Restaurar clave v1** | Vuelve a escribir la base antigua en `gymtrack:db:v1` para abrirla con ALPHA-FIT 1.x. Tus datos v2 no se tocan. |
 | **Eliminar archivo** | Borra el archivo. Irreversible. |
 
 Los respaldos v1 no se pueden importar en la v2: el modelo es incompatible, no un formato.

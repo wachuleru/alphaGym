@@ -1,4 +1,4 @@
-# Modelo de datos — GymTrack
+# Modelo de datos — ALPHA-FIT
 
 > Documentación del esquema completo de datos. La aplicación almacena todo en `localStorage` bajo la clave `gymtrack:db:v2` como un único objeto JSON. Esta página describe cada entidad, sus campos y las relaciones entre ellas.
 
@@ -51,6 +51,7 @@ grupo **Sin categoría**, que siempre se muestra al final.
   "exercises":           [],        // Catálogo reutilizable de ejercicios
   "trainings":           [],        // Plantillas de entrenamiento (globales)
   "trainingCategories":  [],        // Agrupación de entrenamientos (añadida en 2.1)
+  "closures":            [],        // Feriados y cierres (añadida en 2.2)
   "measurements":        [],        // Mediciones físicas (peso, medidas, calorías)
   "goals":               [],        // Objetivos individuales
   "payments":            [],        // Pagos / mensualidades
@@ -67,7 +68,7 @@ escribía ninguna vista).
 {
   "version": 2,                     // Versión del esquema de datos
   "appVersion": "2.0.0",            // Versión de la app con que se generó
-  "appName": "GymTrack",
+  "appName": "ALPHA-FIT",
   "createdAt": "2026-10-20T...",    // ISO timestamp del primer arranque
   "lastExportAt": null,             // ISO timestamp de la última exportación JSON
   "lastImportAt": null,             // ISO timestamp de la última importación JSON
@@ -82,7 +83,7 @@ escribía ninguna vista).
   "weekStartDay": 1,                // 0=Domingo, 1=Lunes (configurable)
   "currency": "CLP",                // Moneda
   "defaultWeeklyGoal": 2,           // Frecuencia semanal por defecto
-  "gymName": "GymTrack",            // Nombre que aparece en informes
+  "gymName": "ALPHA-FIT",            // Nombre que aparece en informes
   "theme": "dark"                   // Tema visual
 }
 ```
@@ -109,7 +110,31 @@ escribía ninguna vista).
 | `notes`            | string    | Notas internas (no compartibles por defecto).          |
 | `membershipStart`  | string    | Inicio de la membresía actual (opcional).             |
 | `membershipEnd`    | string    | Vencimiento de la membresía actual (opcional).        |
+| `exemptWeeks`      | string[]  | Lunes (`YYYY-MM-DD`) de semanas justificadas para este alumno (añadido en 2.2). |
 | `meta`             | object    | `createdAt`, `updatedAt`, `isDemo`.                  |
+
+### `closures` — Feriados y cierres (2.2)
+
+Justificaciones **globales**: aplican a todos los alumnos. Vive en `Data y configuración →
+Justificaciones`.
+
+| Campo      | Tipo   | Descripción                                                       |
+|------------|--------|-------------------------------------------------------------------|
+| `id`       | string | Identificador único e inmutable (`clo_xxxxxx`).                     |
+| `dateISO`  | string | Primer día justificado `YYYY-MM-DD`. Obligatorio.                 |
+| `endISO`   | string? | Último día justificado. `null` = un solo día.                      |
+| `name`     | string | Motivo legible ("Feriado nacional", "Cierre por mantenimiento"). |
+| `createdAt`| string | Fecha de alta `YYYY-MM-DD`.                                       |
+| `meta`     | object | `createdAt`, `isDemo`.                                            |
+
+Reglas:
+
+- El rango `dateISO`→`endISO` avanza **en el tiempo** y no puede pasar de **31 días**, para que un
+  error de tipeo no borre un año de historial.
+- No se admiten dos cierres con la misma `dateISO` de inicio.
+- Se justifica la **semana calendario completa** que contiene la fecha: dos cierres en la misma
+  semana colapsan en una sola semana exenta.
+- Un cierre se elimina borrándolo. No hay estado archivado ni cascada: no toca asistencias.
 
 ### `attendances` — Asistencias (con la ejecución)
 
@@ -360,7 +385,7 @@ base se corrige sola. Congelarla produciría deltas mentirosos justo en el caso 
 
 ## Sistema de niveles (gamificación)
 
-GymTrack premia exclusivamente la constancia. Hay cinco niveles: Principiante, Constante, Comprometido, Disciplinado y Referente. Los umbrales están en `assets/js/config.js` en la constante `LEVELS`. Cada nivel exige simultáneamente:
+ALPHA-FIT premia exclusivamente la constancia. Hay cinco niveles: Principiante, Constante, Comprometido, Disciplinado y Referente. Los umbrales están en `assets/js/config.js` en la constante `LEVELS`. Cada nivel exige simultáneamente:
 
 - `totalAttendances` acumulado
 - `streakWeeks` (semanas consecutivas cumpliendo la meta)
@@ -392,16 +417,40 @@ Se cuentan hacia atrás desde la **semana actual**:
 La diferencia entre (2) y (3) es lo que hace que esto sea una racha: perdonar la semana que está en
 curso es justice, perdonar un hueco de hace un mes es mentira.
 
+### Semanas justificadas (2.2)
+
+Una semana está **justificada** si contiene algún día de un `closures[]` (feriado nacional, cierre del
+gimnasio) o si su lunes está en el `exemptWeeks[]` del alumno (enfermedad, viaje, permiso).
+
+Una semana justificada **no cuenta ni a favor ni en contra**:
+
+| Situación                                   | Racha                          | Cumplimiento                          |
+|---------------------------------------------|--------------------------------|---------------------------------------|
+| Justificada **y vacía**                      | se salta: no suma, no corta     | sale del denominador                  |
+| Justificada **y cumplida de todos modos**    | cuenta igual que cualquier otra | cuenta como semana cumplida          |
+
+Es decir, la justificación **sólo puede ayudar**: nunca resta, nunca agrega semanas que el alumno no
+entrenó. Perder una sesión por un feriado es un artefacto de medición, no un hecho sobre la
+constancia del alumno.
+
+Sin este mecanismo, con la meta por defecto de 2 sesiones/semana, un solo feriado por semana
+rompe la racha: en Chile hay ~18 feriados al año, o sea una racha de 8 semanas es un espejismo.
+
 ### Cumplimiento semanal (`weeklyCompliance`)
 
 Ventana de **12 semanas calendario hacia atrás desde la semana actual**. Una semana sin asistencias
 cuenta como incumplimiento — no se salta. Así, un alumno que abandona deja de arrastrar su mejor
-historial para siempre.
+historial para siempre. Las semanas justificadas son la única excepción: salen del denominador.
 
 La ventana **no retrocede antes de que el alumno estuviera en el gimnasio**, y ese tope es **el más
 temprano entre `joinedAt` y su primera asistencia registrada**. Cubre los dos casos: un alumno que se
 inscribe hoy no es sancionado por las semanas anteriores, y una ficha creada hoy pero con historial
 retroactivo sí se juzga sobre ese historial.
+
+Ese tope aplica **sólo a la ventana de cumplimiento**. El recorrido de la racha no lo usa: `joinedAt`
+por defecto es el día en que se creó la ficha, así que imposing un piso de inscripción a una ficha
+creada hoy con historial retroactivo le truncaría la racha en cero. La racha termina donde
+empieza el historial del alumno (una semana sin sesión registrada y sin justificación).
 
 ## Insignias (badges)
 
@@ -436,7 +485,7 @@ Desde **Datos y configuración → Archivo de la versión anterior (v1)**, sólo
 | Acción | Efecto |
 |---|---|
 | **Descargar copia v1** | `gymtrack_v1_<fecha>.json` con el contenido byte-idéntico. |
-| **Restaurar clave v1** | Reescribe `gymtrack:db:v1` para abrirla con GymTrack 1.x. **No toca la v2.** |
+| **Restaurar clave v1** | Reescribe `gymtrack:db:v1` para abrirla con ALPHA-FIT 1.x. **No toca la v2.** |
 | **Eliminar archivo** | Borra `gymtrack:archive:v1`. Irreversible. |
 
 `importJSON()` rechaza respaldos con `schemaVersion < 2` y dice explícitamente dónde está la copia
@@ -449,7 +498,7 @@ La exportación a JSON guarda todas las colecciones más `meta` y `config`. El a
 La importación valida:
 
 1. Que sea JSON parseable.
-2. Que `app === "GymTrack"`.
+2. Que `app` sea `ALPHA-FIT` (o el nombre anterior `GymTrack`, que se sigue aceptando por compatibilidad).
 3. Que `schemaVersion` sea un número y no sea mayor a la versión actual.
 4. Que exista la sección `data` y todas las colecciones requeridas.
 

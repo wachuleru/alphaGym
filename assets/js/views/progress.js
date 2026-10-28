@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Progress (measurements overview)
+   ALPHA-FIT — Progress (measurements overview)
    =========================================================== */
 
 import { $, el, fmtDate, fmtCLP, initials } from '../utils.js';

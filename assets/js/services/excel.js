@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Excel import / export using SheetJS
+   ALPHA-FIT — Excel import / export using SheetJS
    Used only on the client. Works entirely in browser.
    =========================================================== */
 

@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — central localStorage layer
+   ALPHA-FIT — central localStorage layer
    The ONLY module that talks to localStorage.
    Exposes: load(), save(), getState(), setState(), patchCollection(),
             subscribe(), notify(), exportJSON(), importJSON(),
@@ -25,7 +25,7 @@ function emptyDB() {
       weekStartDay: 1,
       currency: 'CLP',
       defaultWeeklyGoal: 2,
-      gymName: 'GymTrack',
+      gymName: APP_NAME,
       theme: 'dark',
     },
     students: [],
@@ -33,6 +33,7 @@ function emptyDB() {
     exercises: [],
     trainings: [],
     trainingCategories: [],
+    closures: [],
     measurements: [],
     goals: [],
     payments: [],
@@ -148,6 +149,13 @@ export function exportJSON() {
 }
 
 /**
+ * Nombres de aplicación aceptados al importar un respaldo.
+ * 'GymTrack' es el nombre anterior (antes del rebranding a ALPHA-FIT):
+ * se sigue aceptando para que los respaldos ya exportados no queden huérfanos.
+ */
+const ACCEPTED_APP_NAMES = [APP_NAME, 'GymTrack'];
+
+/**
  * Validate and apply a backup JSON. Returns { ok, summary, error }.
  * On success, replaces the in-memory state and re-saves.
  * v1 backups are rejected with an actionable error.
@@ -158,7 +166,7 @@ export function importJSON(text) {
   catch (err) { return { ok: false, error: 'Archivo no es JSON válido.' }; }
 
   if (!parsed || typeof parsed !== 'object') return { ok: false, error: 'Formato inválido.' };
-  if (parsed.app !== APP_NAME) return { ok: false, error: 'Este archivo no proviene de ' + APP_NAME + '.' };
+  if (!ACCEPTED_APP_NAMES.includes(parsed.app)) return { ok: false, error: 'Este archivo no proviene de ' + APP_NAME + '.' };
   if (typeof parsed.schemaVersion !== 'number') return { ok: false, error: 'Falta versión del esquema.' };
   if (parsed.schemaVersion > SCHEMA_VERSION) return { ok: false, error: 'La versión del archivo es más nueva que la aplicación.' };
   if (parsed.schemaVersion < SCHEMA_VERSION) {
@@ -182,6 +190,7 @@ export function importJSON(text) {
     exercises: (data.exercises || []).length,
     trainings: (data.trainings || []).length,
     trainingCategories: (data.trainingCategories || []).length,
+    closures: (data.closures || []).length,
     measurements: (data.measurements || []).length,
     goals: (data.goals || []).length,
     payments: (data.payments || []).length,
@@ -221,6 +230,7 @@ export function removeDemo() {
   db.exercises = (db.exercises || []).filter((x) => !isDemo(x));
   db.trainings = (db.trainings || []).filter((t) => !isDemo(t));
   db.trainingCategories = (db.trainingCategories || []).filter((c) => !isDemo(c));
+  db.closures = (db.closures || []).filter((c) => !isDemo(c));
 
   // Student-scoped collections: drop demo students, cascade the rest.
   db.students = (db.students || []).filter((s) => !isDemo(s));

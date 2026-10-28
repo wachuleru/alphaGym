@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Students service
+   ALPHA-FIT — Students service
    =========================================================== */
 
 import { getState, setState } from '../storage.js';
@@ -32,6 +32,9 @@ export function createStudent(input = {}) {
     notes: '',
     membershipStart:  input.membershipStart  || null,
     membershipEnd:    input.membershipEnd    || null,
+    // Week keys (the Monday, YYYY-MM-DD) excused from streak and compliance,
+    // for absences a global closure can't cover: illness, travel, permission.
+    exemptWeeks: Array.isArray(input.exemptWeeks) ? [...input.exemptWeeks] : [],
     meta: { createdAt: now, updatedAt: now, isDemo: !!input.isDemo },
   };
   setState((db) => ({ ...db, students: [student, ...db.students] }));
@@ -62,4 +65,28 @@ export function deleteStudent(id) {
 export function fullName(s) {
   if (!s) return '';
   return [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
+}
+
+/** Week keys excused for this student, ascending. */
+export function exemptWeeksOf(student) {
+  return [...(student?.exemptWeeks || [])].sort();
+}
+
+/**
+ * Excuse (or re-impose) a week for one student. Storing the Monday rather than
+ * the date picked in the UI keeps this idempotent: any day of the same week
+ * resolves to the same key, so the caller never has to normalise first.
+ * Returns the updated student, or null when the week key is malformed.
+ */
+export function setWeekExempt(studentId, weekKey, exempt = true) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(weekKey || ''))) return null;
+  const patch = {};
+  if (exempt) {
+    const current = exemptWeeksOf(findStudent(studentId));
+    if (!current.includes(weekKey)) current.push(weekKey);
+    patch.exemptWeeks = current;
+  } else {
+    patch.exemptWeeks = exemptWeeksOf(findStudent(studentId)).filter((w) => w !== weekKey);
+  }
+  return updateStudent(studentId, patch);
 }

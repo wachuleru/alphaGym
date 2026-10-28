@@ -262,4 +262,101 @@ eq(complianceOf([1, 2, 3].map(weekOf), todayISO()), 3 / 4,
 eq(complianceOf([0, 1, 2, 3, 4, 5].map(weekOf), twelveAgo), 6 / 12, '6 of 12 weeks compliant → 50%');
 eq(complianceOf([], todayISO()), 0, 'no attendances → 0% compliance, not 100%');
 
+/* 12) Semanas justificadas ------------------------------------ */
+console.log('\n--- justificaciones ---');
+
+const { listClosures, createClosure, deleteClosure, closureWeekKeys, weekKeyOf } =
+  await import('../assets/js/services/closures.js');
+const { findStudent, setWeekExempt, exemptWeeksOf } = await import('../assets/js/services/students.js');
+const { STRIP_WEEKS } = await import('../assets/js/services/levels.js');
+
+/** Days inside the week `w` weeks back; offsets count from its Monday. */
+const days = (w, offs) => offs.map((o) => toISODate(addDays(fromISODate(mondayOf(w)), o)));
+const GOOD = [2, 4];  // 2 sessions — meets a goal of 2
+const ONE = [2];      // 1 session — misses it
+
+const metricsOf = (student, isoList, closures = []) =>
+  computeStudentMetrics(
+    student,
+    isoList.map((dateISO, i) => ({ id: `att${i}`, studentId: student.id, dateISO })),
+    [], [], closures,
+  );
+
+const stu2 = { id: 'RX', weeklyGoal: 2 };
+// Met the goal in weeks 1, 3, 4 and 5, but only trained once in week 2 — a holiday.
+const HOLIDAY_LESS = [1, 3, 4, 5].flatMap((w) => days(w, GOOD)).concat(days(2, ONE));
+const inWeek2 = [{ dateISO: days(2, [3])[0], endISO: null, name: 'Feriado' }];
+
+eq(metricsOf(stu2, HOLIDAY_LESS).streakWeeks, 1, 'one weak week cuts a 5-week run down to 1');
+eq(metricsOf(stu2, HOLIDAY_LESS, inWeek2).streakWeeks, 4,
+  'a closure over the weak week restores the streak across it');
+eq(metricsOf({ ...stu2, exemptWeeks: [mondayOf(2)] }, HOLIDAY_LESS).streakWeeks, 4,
+  "the student's own exemption works exactly like a global closure");
+eq(metricsOf({ ...stu2, exemptWeeks: [mondayOf(4)] }, HOLIDAY_LESS).streakWeeks, 1,
+  'a justification does not help unless it covers the week that broke the streak');
+
+// A justified week the student met anyway is just a good week.
+const ALL_GOOD = [1, 2, 3].flatMap((w) => days(w, GOOD));
+eq(metricsOf(stu2, ALL_GOOD).streakWeeks, 3, '3 good weeks → 3');
+eq(metricsOf(stu2, ALL_GOOD, [{ dateISO: days(3, [3])[0], endISO: null }]).streakWeeks, 3,
+  'a justified week that was still met keeps counting');
+
+// Compliance: the justified week leaves the denominator instead of scoring 0.
+eq(metricsOf({ ...stu2, joinedAt: twelveAgo }, HOLIDAY_LESS).weeklyCompliance, 4 / 12,
+  'without a closure the holiday week is one failure out of 12');
+eq(metricsOf({ ...stu2, joinedAt: twelveAgo }, HOLIDAY_LESS, inWeek2).weeklyCompliance, 4 / 11,
+  'with a closure it leaves the denominator: 4 of 11 judged weeks');
+
+// Nothing is cached — removing the justification restores the bad verdict.
+const created = createClosure({ dateISO: days(2, [3])[0], name: 'Feriado nacional' });
+eq(created.ok, true, 'createClosure accepts a valid date');
+eq(metricsOf({ ...stu2, joinedAt: twelveAgo }, HOLIDAY_LESS, listClosures()).streakWeeks, 4,
+  'the stored closure is read on every render');
+deleteClosure(created.closure.id);
+eq(metricsOf({ ...stu2, joinedAt: twelveAgo }, HOLIDAY_LESS, listClosures()).streakWeeks, 1,
+  'deleting the closure restores the verdict instantly (metrics are derived)');
+
+eq(createClosure({ dateISO: 'ayer' }).ok, false, 'a non-ISO date is rejected');
+eq(createClosure({ dateISO: days(2, [2])[0], endISO: days(3, [2])[0] }).ok, false,
+  'an end date before the start is rejected');
+eq(createClosure({ dateISO: days(3, [2])[0], endISO: `${days(3, [2])[0]}T` }).ok, false,
+  'a malformed end date is rejected');
+eq(createClosure({ dateISO: days(3, [2])[0], endISO: toISODate(addDays(fromISODate(days(3, [2])[0]), 90)) }).ok, false,
+  'a runaway range is rejected so a typo cannot blank a year');
+
+eq(closureWeekKeys([
+  { dateISO: days(2, [0])[0], endISO: days(2, [6])[0] },
+  { dateISO: days(2, [2])[0], endISO: null },
+]).size, 1, 'two closures in the same week collapse into one');
+eq([...closureWeekKeys([{ dateISO: days(2, [0])[0], endISO: days(2, [6])[0] }])][0], mondayOf(2),
+  'a week-long range resolves to the Monday of that week');
+
+eq(exemptWeeksOf(findStudent(stu.id)).length, 0, 'a new student has no personal justifications');
+setWeekExempt(stu.id, weekKeyOf(days(4, [3])[0]), true);
+setWeekExempt(stu.id, weekKeyOf(days(4, [5])[0]), true);
+eq(exemptWeeksOf(findStudent(stu.id)).join(','), mondayOf(4),
+  'any day of a week maps to the same key, and adding twice changes nothing');
+setWeekExempt(stu.id, mondayOf(4), false);
+eq(exemptWeeksOf(findStudent(stu.id)).length, 0, 'un-justifying removes the week');
+eq(setWeekExempt(stu.id, 'no-es-una-fecha', true), null, 'a malformed week key is rejected');
+
+eq(metricsOf(stu2, HOLIDAY_LESS).recentWeeks.length, STRIP_WEEKS,
+  'the strip always renders STRIP_WEEKS calendar weeks, empty ones included');
+
+// The exemption skip removes the map lookup that used to end the streak loop on
+// its own, so a run of justified empty weeks must still terminate. A closure
+// spans forward in time only, so weeks 1–4 are covered from week 4 to the Sunday
+// of week 1 — 27 days, inside the 31-day cap on a single closure.
+const fourWeeksOff = [{
+  dateISO: mondayOf(4),
+  endISO: toISODate(addDays(fromISODate(mondayOf(1)), 6)),
+}];
+const farHistory = [5, 6].flatMap((w) => days(w, GOOD));
+eq(metricsOf({ id: 'NOJOIN', weeklyGoal: 2 }, farHistory, fourWeeksOff).streakWeeks, 2,
+  'four consecutive justified weeks are stepped over and the walk still ends');
+eq(metricsOf({ ...stu2, joinedAt: twelveAgo }, farHistory, fourWeeksOff).streakWeeks, 2,
+  'the floor is the enrollment week, not the first attendance, so a late starter keeps the streak');
+eq(metricsOf({ ...stu2, joinedAt: twelveAgo }, farHistory, []).streakWeeks, 0,
+  'without the justification the same gap breaks the streak, which is the whole point');
+
 console.log(`\n${failed === 0 ? 'ALL OK' : 'FAILURES'}: ${passed} passed, ${failed} failed.`);

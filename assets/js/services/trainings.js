@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Trainings service (templates, decoupled from student)
+   ALPHA-FIT — Trainings service (templates, decoupled from student)
    =========================================================== */
 
 import { getState, setState } from '../storage.js';

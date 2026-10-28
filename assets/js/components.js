@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — toasts, modals, dialogs (UI feedback primitives)
+   ALPHA-FIT — toasts, modals, dialogs (UI feedback primitives)
    =========================================================== */
 
 import { $, el } from './utils.js';

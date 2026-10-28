@@ -1,6 +1,6 @@
-# Importación y exportación Excel — GymTrack
+# Importación y exportación Excel — ALPHA-FIT
 
-GymTrack usa [SheetJS (xlsx)](https://sheetjs.com/) para leer y generar hojas de cálculo **dentro del navegador**, sin necesidad de un servidor. Toda la operación es local.
+ALPHA-FIT usa [SheetJS (xlsx)](https://sheetjs.com/) para leer y generar hojas de cálculo **dentro del navegador**, sin necesidad de un servidor. Toda la operación es local.
 
 ## Formato general
 
@@ -121,7 +121,7 @@ Si la fecha es ambigua o no se reconoce, se marcará la fila como error.
 3. Abre la plantilla en Excel u otra hoja de cálculo.
 4. Completa las filas. La primera fila (ejemplo) puede eliminarse.
 5. Guarda el archivo.
-6. Regresa a GymTrack y haz clic en **Importar alumnos** → selecciona el archivo.
+6. Regresa a ALPHA-FIT y haz clic en **Importar alumnos** → selecciona el archivo.
 7. Verás un cuadro con la cantidad de registros creados, filas omitidas (duplicadas) y, si los hay, errores por fila.
 
 ## Ejemplo de flujo: registrar 30 mediciones

@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Students list + creation
+   ALPHA-FIT — Students list + creation
    =========================================================== */
 
 import { $, el, fmtDate, todayISO, initials, fmtCLP, debounce } from '../utils.js';
@@ -7,6 +7,7 @@ import { listStudents, createStudent, fullName } from '../services/students.js';
 import { listAttendances, lastAttendanceFor } from '../services/attendance.js';
 import { nextDueFor } from '../services/payments.js';
 import { computeStudentMetrics, determineLevel } from '../services/levels.js';
+import { listClosures } from '../services/closures.js';
 import { refreshIcons } from '../icons.js';
 import { openModal, toast, toastError } from '../components.js';
 
@@ -79,7 +80,7 @@ export async function renderStudentsList(params) {
 function getCache() {
   return listStudents().map((s) => ({
     s,
-    metrics: computeStudentMetrics(s, listAttendances()),
+    metrics: computeStudentMetrics(s, listAttendances(), [], [], listClosures()),
     last: lastAttendanceFor(s.id),
     due: nextDueFor(s.id),
   }));

@@ -1,10 +1,12 @@
 /* ===========================================================
-   GymTrack — Individual reports view
+   ALPHA-FIT — Individual reports view
    =========================================================== */
 
 import { $, el, fmtDate, todayISO } from '../utils.js';
 import { listStudents, fullName } from '../services/students.js';
 import { DEFAULT_SECTIONS, buildReportContext, renderReport } from '../services/reports.js';
+import { getState } from '../storage.js';
+import { APP_NAME } from '../config.js';
 import { refreshIcons } from '../icons.js';
 import { openModal, toast } from '../components.js';
 
@@ -144,7 +146,7 @@ function generatePreview() {
     toISO: $('#repTo').value || null,
     trainerComment: $('#repComment').value.trim(),
   });
-  const html = renderReport(ctx);
+  const html = renderReport(ctx, getState()?.config?.gymName || APP_NAME);
   $('#repPreview').innerHTML = html;
   $('#repPrint').disabled = false;
   refreshIcons($('#repPreview'));

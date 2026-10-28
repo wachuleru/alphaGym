@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Student detail (tabs)
+   ALPHA-FIT — Student detail (tabs)
    =========================================================== */
 
 import { $, el, fmtDate, fmtCLP, fmtDateTime, fmtPct, todayISO, fromISODate, initials, fmtTime, relativeTime, debounce } from '../utils.js';
@@ -11,6 +11,7 @@ import { forStudent as paymentsFor, forStudent as paymentsForStudent } from '../
 import { findTraining } from '../services/trainings.js';
 import { findCategory } from '../services/categories.js';
 import { weightDelta } from '../services/entries.js';
+import { listClosures } from '../services/closures.js';
 import { openAttendanceForm } from './attendance-form.js';
 import { forStudent as goalsForStudent, createGoal, deleteGoal } from '../services/goals.js';
 import { forStudent as notesForStudent, createNote, updateNote, deleteNote } from '../services/notes.js';
@@ -45,7 +46,7 @@ export async function renderStudentDetail(params) {
   }
 
   const allAtt = listAttendances().filter((a) => a.studentId === student.id);
-  const metrics = computeStudentMetrics(student, allAtt);
+  const metrics = computeStudentMetrics(student, allAtt, [], [], listClosures());
   const level = determineLevel(metrics);
 
   const main = $('#main');
@@ -191,10 +192,17 @@ function renderSummaryKPIs(student, metrics) {
   const lastAtt = metrics.lastAttendanceISO ? fmtDate(metrics.lastAttendanceISO) : '—';
   const total = metrics.totalAttendances;
   const recent = (() => {
-    return metrics.weekKeys.slice(-8).map((k, i, arr) => {
+    const goal = student.weeklyGoal || 2;
+    // Calendar weeks, not "weeks that happen to contain an attendance": an empty
+    // week is exactly what the streak punishes, so it has to be visible here.
+    return (metrics.recentWeeks || []).map((k) => {
+      const label = fmtDate(k);
+      if (metrics.exemptWeeks?.has(k)) {
+        return `<div class="stat__delta stat__delta--flat" title="Semana del ${escapeHtml(label)}: justificada, no cuenta">libre</div>`;
+      }
       const cnt = metrics.weekMap.get(k) || 0;
-      const goal = student.weeklyGoal || 2;
-      return `<div class="stat__delta ${cnt >= goal ? 'stat__delta--up' : 'stat__delta--down'}">${cnt}/${goal}</div>`;
+      const tone = cnt >= goal ? 'stat__delta--up' : 'stat__delta--down';
+      return `<div class="stat__delta ${tone}" title="Semana del ${escapeHtml(label)}">${cnt}/${goal}</div>`;
     }).join('');
   })();
 
@@ -361,10 +369,10 @@ function renderAttendanceTab(root, student) {
     return allAtt.filter((a) => fromISODate(a.dateISO) >= monday);
   })();
   const streak = (() => {
-    const m = computeStudentMetrics(student, allAtt);
+    const m = computeStudentMetrics(student, allAtt, [], [], listClosures());
     return m.streakWeeks;
   })();
-  const compliance = fmtPct(computeStudentMetrics(student, allAtt).weeklyCompliance);
+  const compliance = fmtPct(computeStudentMetrics(student, allAtt, [], [], listClosures()).weeklyCompliance);
 
   $('#sdAttKPIs').innerHTML = `
     <div class="stack-4">
@@ -1211,7 +1219,7 @@ function renderLevelTab(root, student) {
   const own = listAttendances().filter((a) => a.studentId === student.id);
   const meas = listMeasurements().filter((m) => m.studentId === student.id);
   const goals = goalsForStudent(student.id);
-  const metrics = computeStudentMetrics(student, own, meas, goals);
+  const metrics = computeStudentMetrics(student, own, meas, goals, listClosures());
   const level = determineLevel(metrics);
   const badges = allBadgesWithStatus(metrics);
   const earned = earnedBadges(metrics);

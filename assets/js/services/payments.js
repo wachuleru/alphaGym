@@ -1,5 +1,5 @@
 /* ===========================================================
-   GymTrack — Payments service
+   ALPHA-FIT — Payments service
    =========================================================== */
 
 import { getState, setState } from '../storage.js';
